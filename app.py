@@ -23,9 +23,10 @@ st.markdown(
     .donut-hole {{ width: 125px; height: 125px; background-color: #141414; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white; }}
     .macros-row {{ display: flex; justify-content: space-around; width: 100%; max-width: 340px; margin-top: 12px; font-size: 12px; background-color: rgba(20, 20, 20, 0.9); padding: 8px 6px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); }}
     .stButton button {{ width: 100%; border-radius: 10px; }}
-    /* Примусове вирівнювання кнопок в один рядок без рамок колонок */
-    [data-testid="column"] {{ width: calc(50% - 0.5rem) !important; flex: 1; min-width: calc(50% - 0.5rem) !important; }}
-    div.row-widget.stHorizontal {{ display: flex; flex-direction: row; gap: 1rem; }}
+    
+    /* Додатковий стилінг для вирівнювання кнопок в один рядок */
+    div.row-widget.stHorizontal {{ display: flex; flex-direction: row; gap: 10px; }}
+    div.row-widget.stHorizontal > div {{ flex: 1; }}
     </style>
     """, unsafe_allow_html=True,
 )
@@ -67,7 +68,11 @@ def save_weight(w):
 
 def load_data():
     if os.path.exists(EXCEL_FILE):
-        return pd.read_excel(EXCEL_FILE)
+        df = pd.read_excel(EXCEL_FILE)
+        # Гарантуємо наявність колонки часу
+        if "Час" not in df.columns:
+            df["Час"] = datetime.now().strftime("%H:%M")
+        return df
     return pd.DataFrame(columns=["Дата", "Час", "Опис", "Тип", "Спожито", "Спалено", "Білки", "Жири", "Вуглеводи"])
 
 user_settings = load_settings()
@@ -82,11 +87,11 @@ with st.container(border=True):
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
 if submit_btn and user_input:
-    # Фіксуємо актуальний час безпосередньо в момент натискання
+    # Забороняємо будь-яким зовнішнім джерелам впливати на час — беремо строго момент кліку
     current_time_str = datetime.now().strftime("%H:%M")
     current_date_str = datetime.now().strftime("%Y-%m-%d")
     
-    prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
+    prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs. Не додавай ніякого часу в опис.'
     try:
         response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
         data = json.loads(response.text)
@@ -128,9 +133,9 @@ selected_date = st.selectbox("📅 Вибрати день для перегля
 if st.button("⚙️ Налаштування", use_container_width=True): 
     st.session_state["edit_mode"] = not st.session_state["edit_mode"]
 
-# 4. Кнопки «Видалити» та «Повернути» чітко в один рядок
-btn_col1, btn_col2 = st.columns(2)
-with btn_col1:
+# 4. Кнопки «Видалити» та «Повернути» в один рядок
+btn1, btn2 = st.columns(2)
+with btn1:
     if st.button("🗑️ Видалити", use_container_width=True):
         if not df_data.empty:
             last_row = df_data.iloc[-1:].to_dict(orient="records")
@@ -138,7 +143,7 @@ with btn_col1:
             df_data = df_data.iloc[:-1]
             df_data.to_excel(EXCEL_FILE, index=False)
             st.rerun()
-with btn_col2:
+with btn2:
     has_trash = os.path.exists(TRASH_FILE)
     if st.button("🔄 Повернути", disabled=not has_trash, use_container_width=True):
         if has_trash:
@@ -210,7 +215,7 @@ if not day_df.empty:
     c1.metric("🍽️ З'їв", f"{int(consumed)} ккал")
     c2.metric("🔥 Спалено", f"{int(total_burned)} ккал")
     
-    log_lines = [f"• {row['Час']} {'💪' if row['Тип'] == 'Тренування' else '🍽️'} {row['Опис']} — <b>{int(row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито'])} ккал</b>" for _, row in day_df.iterrows()]
+    log_lines = [f"• {str(row['Час'])[:5]} {'💪' if row['Тип'] == 'Тренування' else '🍽️'} {row['Опис']} — <b>{int(row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито'])} ккал</b>" for _, row in day_df.iterrows()]
     st.markdown(f'<div class="food-box"><b>📝 Лог:</b><br>{"<br>".join(log_lines)}</div>', unsafe_allow_html=True)
     
     if st.button("💡 Порада Gemini", use_container_width=True):
