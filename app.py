@@ -7,8 +7,10 @@ from google.genai import types
 
 EXCEL_FILE = 'fitness_tracker.xlsx'
 
-# Ваші персональні норми для схуднення (при вазі 89 кг)
-TARGETS = {'kcal': 2050, 'protein': 170, 'fat': 75, 'carbs': 190}
+# Базова цільова норма калорій для схуднення (при вазі 89 кг)
+BASE_CALORIE_TARGET = 2050
+
+TARGETS = {'kcal': BASE_CALORIE_TARGET, 'protein': 170, 'fat': 75, 'carbs': 190}
 
 DAYS_UA = {
     'Monday': 'Понеділок',
@@ -39,8 +41,8 @@ with st.container(border=True):
   user_input = st.text_input(
       'Рядок введення:',
       placeholder=(
-          "Наприклад: з'їв 30г чорного хліба з 10г індичої ковбаси, пройшов 8500"
-          ' кроків, спалено 450 ккал'
+          "Наприклад: з'їв 30г чорного хліба, пройшов 8500 кроків, спалено 450"
+          ' ккал'
       ),
       label_visibility='collapsed',
   )
@@ -53,9 +55,9 @@ if submit_btn and user_input:
 
     Поверни відповідь СУВОРO у форматі JSON із такими полями:
     {{
-        "food_description": <короткий опис з'їденої їжі рядком, наприклад "хліб чорний, ковбаса індича", якщо їжі немає - пустий рядок ""типу такого: "">,
-        "steps": <ціле число кроків, якщо вказано, інакше null>,
-        "kcal_burned": <число спалених ккал/калорій за активність, якщо вказано, інакше null>,
+        "food_description": <короткий опис з'їденої їжі рядком, наприклад "хліб чорний, ковбаса", якщо їжі немає - пустий рядок "">,
+        "steps": <ціле число кроків з тексту, якщо вказано, інакше null>,
+        "kcal_burned": <число спалених ккал/калорій за активність з тексту, якщо вказано, інакше null>,
         "total_consumed_kcal": <загальна калорійність всієї спожитої їжі (ккал)>,
         "total_protein": <загальна кількість білків у грамах>,
         "total_fat": <загальна кількість жирів у грамах>,
@@ -63,9 +65,8 @@ if submit_btn and user_input:
     }}
 
     Правила розрахунку:
-    - Враховуй точну калорійність і БЖВ для конкретного типу продукту.
-    - Якщо вагу вказано приблизно, зроби максимально реалістичну оцінку.
-    - Якщо їжа не згадується, поверни 0 для всіх показників харчування та порожній рядок для food_description.
+    - Чітко шукай в тексті спалені калорії (наприклад, "спалено 450 ккал", "активність 300 ккал") і запиши їх у kcal_burned.
+    - Якщо їжа не згадується, поверни 0 для калорій/БЖВ та порожній рядок для food_description.
     - Відповідь має бути ЛИШЕ чистим JSON-об'єктом без markdown чи додаткового тексту.
     """
 
@@ -111,7 +112,6 @@ if submit_btn and user_input:
           ]
       )
 
-    # Перевірка наявності колонки 'Раціон' для старих файлів
     if 'Раціон' not in df.columns:
       df.insert(2, 'Раціон', '')
 
@@ -138,10 +138,18 @@ if submit_btn and user_input:
         else:
           df.loc[idx, 'Раціон'] = food_desc
 
-      if input_steps is not None:
+      # Оновлюємо кроки, якщо вони вказані в новому вводі
+      if input_steps is not None and float(input_steps) > 0:
         df.loc[idx, 'Кроки'] = float(input_steps)
-      if input_kcal_burned is not None:
-        df.loc[idx, 'Спалено (ккал)'] = float(input_kcal_burned)
+
+      # Додаємо або оновлюємо спалені калорії (плюсуємо до вже записаних за день)
+      if input_kcal_burned is not None and float(input_kcal_burned) > 0:
+        current_burned = (
+            float(df.loc[idx, 'Спалено (ккал)'])
+            if pd.notna(df.loc[idx, 'Спалено (ккал)'])
+            else 0.0
+        )
+        df.loc[idx, 'Спалено (ккал)'] = current_burned + float(input_kcal_burned)
 
       df.loc[idx, 'Спожито (ккал)'] = round(
           df.loc[idx, 'Спожито (ккал)'] + add_kcal, 1
@@ -149,35 +157,25 @@ if submit_btn and user_input:
       df.loc[idx, 'Білки (г)'] = round(df.loc[idx, 'Білки (г)'] + add_p, 1)
       df.loc[idx, 'Жири (г)'] = round(df.loc[idx, 'Жири (г)'] + add_f, 1)
       df.loc[idx, 'Вуглеводи (г)'] = round(df.loc[idx, 'Вуглеводи (г)'] + add_c, 1)
-      df.loc[idx, 'Баланс (ккал)'] = round(
-          df.loc[idx, 'Спожито (ккал)'] - df.loc[idx, 'Спалено (ккал)'], 1
-      )
+
+      # Перерахунок балансу: (Спожито - Спалено)
+      total_burned = float(df.loc[idx, 'Спалено (ккал)'])
+      total_consumed = float(df.loc[idx, 'Спожито (ккал)'])
+      df.loc[idx, 'Баланс (ккал)'] = round(total_consumed - total_burned, 1)
     else:
+      burned_val = float(input_kcal_burned) if input_kcal_burned is not None else 0.0
+      steps_val = float(input_steps) if input_steps is not None else 0.0
       new_row = pd.DataFrame({
           'Дата': [date_str],
           'День тижня': [day_name_ua],
           'Раціон': [food_desc],
-          'Кроки': [float(input_steps) if input_steps is not None else 0.0],
-          'Спалено (ккал)': [
-              float(input_kcal_burned)
-              if input_kcal_burned is not None
-              else 0.0
-          ],
-          'Спожито (ккал)': [round(add_kcal, 1)],
-          'Білки (г)': [round(add_p, 1)],
-          'Жири (г)': [round(add_f, 1)],
-          'Вуглеводи (г)': [round(add_c, 1)],
-          'Баланс (ккал)': [
-              round(
-                  add_kcal
-                  - (
-                      float(input_kcal_burned)
-                      if input_kcal_burned is not None
-                      else 0.0
-                  ),
-                  1,
-              )
-          ],
+          'Кроки': [steps_val],
+          'Спалено (ккал)']: [burned_val],
+          'Спожито (ккал)']: [round(add_kcal, 1)],
+          'Білки (г)']: [round(add_p, 1)],
+          'Жири (г)']: [round(add_f, 1)],
+          'Вуглеводи (г)']: [round(add_c, 1)],
+          'Баланс (ккал)']: [round(add_kcal - burned_val, 1)],
       })
       df = pd.concat([df, new_row], ignore_index=True)
 
@@ -199,17 +197,23 @@ if os.path.exists(EXCEL_FILE):
 
   if not today_row.empty:
     r = today_row.iloc[0]
-    consumed = r['Спожито (ккал)']
-    p_val = r['Білки (г)']
-    f_val = r['Жири (г)']
-    c_val = r['Вуглеводи (г)']
+    consumed = float(r['Спожито (ккал)'])
+    burned = float(r['Спалено (ккал)'])
+    p_val = float(r['Білки (г)'])
+    f_val = float(r['Жири (г)'])
+    c_val = float(r['Вуглеводи (г)'])
+
+    # Ефективна ціль з урахуванням спалених калорій з годинника:
+    # Якщо ви спалили більше калорій, ваша допустима норма споживання збільшується на цю ж суму,
+    # щоб підтримувати правильний чистий дефіцит.
+    effective_target = TARGETS['kcal'] + burned
+    diff_from_target = consumed - effective_target
 
     col1, col2, col3, col4 = st.columns(4)
     col1.metric(
-        'Калорії',
+        'Калорії (Їжа - Спорт)',
         f'{consumed} ккал',
-        delta=f'{consumed - TARGETS["kcal"]} від цілі ({TARGETS["kcal"]})',
-        delta_color='inverse',
+        delta=f'Спалено годинником: {burned} ккал',
     )
     col2.metric(
         'Білки',
@@ -229,15 +233,19 @@ if os.path.exists(EXCEL_FILE):
         delta_color='inverse',
     )
 
-    if consumed <= TARGETS['kcal']:
+    st.markdown(
+        f'* **Базова ціль:** {TARGETS["kcal"]} ккал | **Спалено активністю:**'
+        f' {burned} ккал | **Доступно з урахуванням активності:**'
+        f' **{effective_target} ккал**'
+    )
+
+    if consumed <= effective_target:
       st.success(
-          '🔥 Статус: Ви в дефіциті калорій (чудово для схуднення при вазі 89'
-          ' кг)!'
+          '🔥 Статус: Ви в дефіциті калорій з урахуванням вашої активності!'
       )
     else:
       st.warning(
-          '⚠️ Статус: Норму калорій перевищено. Намагайтеся триматися в межах'
-          f' {TARGETS["kcal"]} ккал.'
+          '⚠️ Статус: Ви перевищили ліміт навіть з урахуванням спалених калорій.'
       )
   else:
     st.info('Сьогодні ще немає записів. Введіть щось вище!')
