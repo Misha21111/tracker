@@ -1,10 +1,17 @@
 import pandas as pd
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from google import genai
 from google.genai import types
+
+# Примусове встановлення локального часу (Варшава)
+try:
+    from zoneinfo import ZoneInfo
+    LOCAL_TZ = ZoneInfo("Europe/Warsaw")
+except ImportError:
+    LOCAL_TZ = timezone(timedelta(hours=2))
 
 st.set_page_config(page_title="Мій Фітнес", layout="centered")
 
@@ -24,9 +31,19 @@ st.markdown(
     .macros-row {{ display: flex; justify-content: space-around; width: 100%; max-width: 340px; margin-top: 12px; font-size: 12px; background-color: rgba(20, 20, 20, 0.9); padding: 8px 6px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); }}
     .stButton button {{ width: 100%; border-radius: 10px; }}
     
-    /* Ультра-жорстке вирівнювання кнопок в один рядок для мобільних */
-    div[data-testid="stHorizontalBlock"] {{ display: flex !important; flex-direction: row !important; gap: 8px !important; }}
-    div[data-testid="stHorizontalBlock"] > div {{ flex: 1 !important; min-width: 0 !important; }}
+    /* ЖОРСТКА БЛОКУВАННЯ ПЕРЕНОСУ КОЛОНОК НА МОБІЛЬНИХ */
+    @media (max-width: 768px) {{
+        div[data-testid="stHorizontalBlock"] {{
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 10px !important;
+        }}
+        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {{
+            width: 50% !important;
+            flex: 1 1 50% !important;
+            min-width: 0 !important;
+        }}
+    }}
     </style>
     """, unsafe_allow_html=True,
 )
@@ -70,7 +87,7 @@ def load_data():
     if os.path.exists(EXCEL_FILE):
         df = pd.read_excel(EXCEL_FILE)
         if "Час" not in df.columns:
-            df["Час"] = datetime.now().strftime("%H:%M")
+            df["Час"] = datetime.now(LOCAL_TZ).strftime("%H:%M")
         return df
     return pd.DataFrame(columns=["Дата", "Час", "Опис", "Тип", "Спожито", "Спалено", "Білки", "Жири", "Вуглеводи"])
 
@@ -80,14 +97,15 @@ df_data = load_data()
 
 st.title("🏋️ Мій фітнес")
 
-# 1. Поле введення їжі — зверху
+# 1. Поле введення їжі
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
 if submit_btn and user_input:
-    current_time_str = datetime.now().strftime("%H:%M")
-    current_date_str = datetime.now().strftime("%Y-%m-%d")
+    # Записуємо точний локальний час у момент кліку
+    current_time_str = datetime.now(LOCAL_TZ).strftime("%H:%M")
+    current_date_str = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
     
     prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
     try:
@@ -117,7 +135,7 @@ if submit_btn and user_input:
     except Exception as e: st.error(f"Помилка: {e}")
 
 # 2. Вибір дня для перегляду
-today_str = datetime.now().strftime("%Y-%m-%d")
+today_str = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
 available_dates = [today_str]
 if not df_data.empty and "Дата" in df_data.columns:
     unique_dates = sorted(df_data["Дата"].astype(str).unique(), reverse=True)
@@ -131,25 +149,28 @@ selected_date = st.selectbox("📅 Вибрати день для перегля
 if st.button("⚙️ Налаштування", use_container_width=True): 
     st.session_state["edit_mode"] = not st.session_state["edit_mode"]
 
-# 4. Кнопки «Видалити» та «Повернути» — фікс в один рядок через єдиний контейнер колонок
-col_del, col_back = st.columns(2)
-with col_del:
-    if st.button("🗑️ Видалити", use_container_width=True):
-        if not df_data.empty:
-            last_row = df_data.iloc[-1:].to_dict(orient="records")
-            with open(TRASH_FILE, "w") as f: json.dump(last_row, f)
-            df_data = df_data.iloc[:-1]
-            df_data.to_excel(EXCEL_FILE, index=False)
-            st.rerun()
-with col_back:
+# 4. Кнопки «Видалити» та «Повернути»
+col1, col2 = st.columns(2)
+with col1:
+    btn_del = st.button("🗑️ Видалити", use_container_width=True)
+with col2:
     has_trash = os.path.exists(TRASH_FILE)
-    if st.button("🔄 Повернути", disabled=not has_trash, use_container_width=True):
-        if has_trash:
-            with open(TRASH_FILE, "r") as f: restored = json.load(f)
-            df_data = pd.concat([df_data, pd.DataFrame(restored)], ignore_index=True)
-            df_data.to_excel(EXCEL_FILE, index=False)
-            os.remove(TRASH_FILE)
-            st.rerun()
+    btn_back = st.button("🔄 Повернути", disabled=not has_trash, use_container_width=True)
+
+if btn_del:
+    if not df_data.empty:
+        last_row = df_data.iloc[-1:].to_dict(orient="records")
+        with open(TRASH_FILE, "w") as f: json.dump(last_row, f)
+        df_data = df_data.iloc[:-1]
+        df_data.to_excel(EXCEL_FILE, index=False)
+        st.rerun()
+
+if btn_back and has_trash:
+    with open(TRASH_FILE, "r") as f: restored = json.load(f)
+    df_data = pd.concat([df_data, pd.DataFrame(restored)], ignore_index=True)
+    df_data.to_excel(EXCEL_FILE, index=False)
+    os.remove(TRASH_FILE)
+    st.rerun()
 
 if st.session_state["edit_mode"]:
     with st.container(border=True):
@@ -167,7 +188,7 @@ if st.session_state["edit_mode"]:
             st.rerun()
 
 day_df = df_data[df_data["Дата"].astype(str) == selected_date] if not df_data.empty else pd.DataFrame()
-now = datetime.now()
+now = datetime.now(LOCAL_TZ)
 
 if not day_df.empty:
     consumed = day_df["Спожито"].sum()
@@ -213,7 +234,6 @@ if not day_df.empty:
     c1.metric("🍽️ З'їв", f"{int(consumed)} ккал")
     c2.metric("🔥 Спалено", f"{int(total_burned)} ккал")
     
-    # Виводимо час із DataFrame (якщо він старий в Excel, видаліть файл fitness_entries.xlsx або очистіть день, і нові записи підуть з правильним поточним часом)
     log_lines = [f"• {str(row['Час'])[:5]} {'💪' if row['Тип'] == 'Тренування' else '🍽️'} {row['Опис']} — <b>{int(row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито'])} ккал</b>" for _, row in day_df.iterrows()]
     st.markdown(f'<div class="food-box"><b>📝 Лог:</b><br>{"<br>".join(log_lines)}</div>', unsafe_allow_html=True)
     
