@@ -40,20 +40,22 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 def load_settings():
+    default = {"calories": 1990, "protein": 160, "fat": 70, "carbs": 180, "bmr_daily": 1850}
     if os.path.exists(SETTINGS_FILE):
-        with open(SETTINGS_FILE, "r") as f: return json.load(f)
-    return {"calories": 1990, "protein": 160, "fat": 70, "carbs": 180, "bmr_daily": 1850}
+        try:
+            with open(SETTINGS_FILE, "r") as f: return {**default, **json.load(f)}
+        except: pass
+    return default
 
 def save_settings(s):
     with open(SETTINGS_FILE, "w") as f: json.dump(s, f)
 
 def load_weight():
-    # Завантажуємо вагу з JSON, яка зберігає прогрес постійно
     if os.path.exists(WEIGHT_FILE):
         try:
             with open(WEIGHT_FILE, "r") as f: return json.load(f)
         except: pass
-    return {"current_weight": 91.8} # Стартове значення
+    return {"current_weight": 91.8}
 
 def save_weight(w):
     with open(WEIGHT_FILE, "w") as f: json.dump(w, f)
@@ -80,12 +82,11 @@ if st.session_state["edit_mode"]:
         e_prot = st.number_input("Ціль білків (г)", value=int(user_settings["protein"]), step=5)
         e_fat = st.number_input("Ціль жирів (г)", value=int(user_settings["fat"]), step=5)
         e_carb = st.number_input("Ціль вуглеводів (г)", value=int(user_settings["carbs"]), step=5)
-        e_weight = st.number_input("Актуальна вага (кг)", value=float(w_data["current_weight"]), step=0.1)
+        e_weight = st.number_input("Актуальна вага (кг)", value=float(w_data.get("current_weight", 91.8)), step=0.1)
         
         if st.button("💾 Зберегти зміни", type="primary", use_container_width=True):
             save_settings({"calories": e_cal, "protein": e_prot, "fat": e_fat, "carbs": e_carb, "bmr_daily": user_settings.get("bmr_daily", 1850)})
-            w_data["current_weight"] = e_weight
-            save_weight(w_data)
+            save_weight({"current_weight": e_weight})
             st.session_state["edit_mode"] = False
             st.rerun()
 
@@ -132,9 +133,8 @@ if not today_df.empty:
     
     total_burned = explicit_burned + (user_settings.get("bmr_daily", 1850) / 24) * (now.hour + now.minute / 60)
     
-    st.markdown(f"**📅 {date_str} | Вага: ~{w_data['current_weight']:.1f} кг**")
+    st.markdown(f"**📅 {date_str} | Вага: ~{w_data.get('current_weight', 91.8):.1f} кг**")
     
-    # Розрахунок прогресу (візуалізація)
     target_cal = user_settings["calories"]
     percent_target = min(100, int((consumed / target_cal) * 100)) if target_cal > 0 else 0
     
