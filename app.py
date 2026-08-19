@@ -5,22 +5,21 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
-# --- НАЛАШТУВАННЯ СТИЛЮ (ЧІТКИЙ ФОН) ---
+# --- НАЛАШТУВАННЯ СТИЛЮ ---
 st.set_page_config(page_title='Мій Фітнес', layout='centered')
 
 st.markdown("""
     <style>
     .stApp {
-        background-image: linear-gradient(rgba(10, 10, 10, 0.8), rgba(10, 10, 10, 0.8)), url("https://i.ibb.co/jXZnnG5/IMG-20260819-144933.jpg");
+        background-image: linear-gradient(rgba(10, 10, 10, 0.75), rgba(10, 10, 10, 0.75)), url("https://i.ibb.co/jXZnnG5/IMG-20260819-144933.jpg");
         background-repeat: no-repeat;
         background-position: center center;
         background-attachment: fixed;
         background-size: cover;
         background-color: #000000;
     }
-    /* Компактні блоки з читабельним текстом */
     div[data-testid="stMetric"], div[data-testid="stMarkdownContainer"], div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: rgba(20, 20, 20, 0.92);
+        background-color: rgba(20, 20, 20, 0.9);
         border-radius: 12px;
         padding: 8px 12px;
         color: white;
@@ -43,8 +42,7 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-# Красивий заголовок з емодзі пончика замість зламаної картинки
-st.title("🍩 Фітнес-трекер")
+st.title("🏋️ Мій фітнес")
 
 with st.container(border=True):
     user_input = st.text_input('📥 Введіть дані:', placeholder="Наприклад: з'їв 30г хліба, спалено 300 ккал")
@@ -76,13 +74,18 @@ if submit_btn and user_input:
     except Exception as e:
         st.error(f'Помилка: {e}')
 
-# --- КОМПАКТНЕ ВІДОБРАЖЕННЯ НА ОДИН ЕКРАН ---
+# --- ЗАМІСТЬ КРУГОВОГО ГРАФІКА — ТВОЯ КАРТИНКА ПОНЧИКА ---
 if os.path.exists(EXCEL_FILE):
     df_current = pd.read_excel(EXCEL_FILE)
     if not df_current.empty:
         latest = df_current.sort_values(by='Дата', ascending=False).iloc[0]
         
         st.markdown(f"**📅 {latest['Дата']} ({latest['День тижня']})**")
+
+        # Виводимо картинку пончика по центру замість графіка
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.image("https://i.ibb.co/609Jt7L/donut.png", use_column_width=True)
 
         # Метрики поруч
         c1, c2 = st.columns(2)
