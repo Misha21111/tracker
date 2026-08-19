@@ -119,8 +119,9 @@ st.title("🏋️ Мій фітнес")
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     
-    # Використовуємо file_uploader з підтримкою камери — на телефоні це дозволяє обрати задню камеру або знімок
-    uploaded_photo = st.file_uploader("📸 Зробити фото / Обрати з галереї", type=["jpg", "jpeg", "png"])
+    camera_photo = None
+    with st.expander("📷 Сканер камери"):
+        camera_photo = st.camera_input("Зробити знімок їжі", key="back_camera")
         
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
@@ -129,7 +130,7 @@ is_camera = False
 
 if submit_btn and user_input:
     should_process = True
-elif uploaded_photo is not None:
+elif camera_photo is not None:
     should_process = True
     is_camera = True
 
@@ -138,8 +139,8 @@ if should_process:
     current_date_str = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
     
     try:
-        if is_camera and uploaded_photo:
-            image_bytes = uploaded_photo.getvalue()
+        if is_camera and camera_photo:
+            image_bytes = camera_photo.getvalue()
             image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
             prompt = "Проаналізуй цю страву на фото. Визнач що це, приблизну вагу, калорії та БЖВ. Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs."
             response = client.models.generate_content(model="gemini-2.5-flash", contents=[image_part, prompt], config=types.GenerateContentConfig(response_mime_type="application/json"))
@@ -149,7 +150,7 @@ if should_process:
             
         data = json.loads(response.text)
         
-        f_desc = data.get("food_description") or (user_input if not is_camera else "Фото їжі")
+        f_desc = data.get("food_description") or (user_input if not is_camera else "Фото з камери")
         k_burned = clean_float(data.get("kcal_burned"))
         c_consumed = clean_float(data.get("total_consumed_kcal"))
         prot = clean_float(data.get("total_protein"))
