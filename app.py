@@ -60,8 +60,14 @@ def load_weight():
 def save_weight(w):
     with open(WEIGHT_FILE, "w") as f: json.dump(w, f)
 
+def load_data():
+    if os.path.exists(EXCEL_FILE):
+        return pd.read_excel(EXCEL_FILE)
+    return pd.DataFrame(columns=["Дата", "Час", "Опис", "Тип", "Спожито", "Спалено", "Білки", "Жири", "Вуглеводи"])
+
 user_settings = load_settings()
 w_data = load_weight()
+df_data = load_data()
 
 st.title("🏋️ Мій фітнес")
 
@@ -85,16 +91,25 @@ if st.session_state["edit_mode"]:
             st.session_state["edit_mode"] = False
             st.rerun()
 
-def load_data():
-    if os.path.exists(EXCEL_FILE):
-        return pd.read_excel(EXCEL_FILE)
-    return pd.DataFrame(columns=["Дата", "Час", "Опис", "Тип", "Спожито", "Спалено", "Білки", "Жири", "Вуглеводи"])
-
-df_data = load_data()
-
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     submit_btn = st.button("Записати", type="primary", use_container_width=True)
+
+col_u1, col_u2 = st.columns(2)
+with col_u1:
+    if st.button("↩️ Скасувати (Undo)", use_container_width=True, disabled=len(st.session_state["history"]) == 0):
+        if st.session_state["history"]:
+            st.session_state["redo_stack"].append(df_data.copy())
+            df_data = st.session_state["history"].pop()
+            df_data.to_excel(EXCEL_FILE, index=False)
+            st.rerun()
+with col_u2:
+    if st.button("🔁 Повернути (Redo)", use_container_width=True, disabled=len(st.session_state["redo_stack"]) == 0):
+        if st.session_state["redo_stack"]:
+            st.session_state["history"].append(df_data.copy())
+            df_data = st.session_state["redo_stack"].pop()
+            df_data.to_excel(EXCEL_FILE, index=False)
+            st.rerun()
 
 now = datetime.now()
 date_str, time_str = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
@@ -128,22 +143,6 @@ if submit_btn and user_input:
         st.rerun()
     except Exception as e: 
         st.error(f"Помилка: {e}")
-
-col_u1, col_u2 = st.columns(2)
-with col_u1:
-    if st.button("↩️ Скасувати (Undo)", use_container_width=True, disabled=len(st.session_state["history"]) == 0):
-        if st.session_state["history"]:
-            st.session_state["redo_stack"].append(df_data.copy())
-            df_data = st.session_state["history"].pop()
-            df_data.to_excel(EXCEL_FILE, index=False)
-            st.rerun()
-with col_u2:
-    if st.button("🔁 Повернути (Redo)", use_container_width=True, disabled=len(st.session_state["redo_stack"]) == 0):
-        if st.session_state["redo_stack"]:
-            st.session_state["history"].append(df_data.copy())
-            df_data = st.session_state["redo_stack"].pop()
-            df_data.to_excel(EXCEL_FILE, index=False)
-            st.rerun()
 
 today_df = df_data[df_data["Дата"].astype(str) == date_str] if not df_data.empty else pd.DataFrame()
 
