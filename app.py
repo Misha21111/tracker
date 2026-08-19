@@ -1,14 +1,16 @@
-with st.container(border=True):
-    user_input = st.text_input("📥 Опис їжі (або назва):", placeholder="Наприклад: з'їв 30г хліба")
-    uploaded_photo = st.file_uploader("Додати фото їжі", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
-    submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
+# Замініть цілий цей блок у вашому коді
+st.markdown("---") # Візуальна лінія зверху
+user_input = st.text_input("📥 Опис їжі (або назва):", placeholder="Наприклад: з'їв 30г хліба")
+uploaded_photo = st.file_uploader("Додати фото їжі", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
+st.markdown("---") # Візуальна лінія знизу
 
-# Логіка обробки (заміна попередньої автоматичної логіки)
+# Логіка обробки
 if submit_btn:
     if not user_input and uploaded_photo is None:
         st.error("⚠️ Будь ласка, введіть опис або завантажте фото!")
     else:
-        with st.spinner("🧠 Gemini аналізує ваше фото..."):
+        with st.spinner("🧠 Gemini аналізує..."):
             current_time_str = datetime.now(LOCAL_TZ).strftime("%H:%M")
             current_date_str = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
             
@@ -52,4 +54,4 @@ if submit_btn:
                 st.success("✅ Записано успішно!")
                 st.rerun()
             except Exception as e: 
-                st.error(f"Помилка аналізу (перевірте ключ API або фото): {e}")
+                st.error(f"Помилка аналізу: {e}")
