@@ -6,6 +6,13 @@ import os
 from google import genai
 from google.genai import types
 
+# Імпортуємо компонент для примусового ввімкнення задньої камери
+try:
+    from streamlit_back_camera_input import back_camera_input
+    HAS_BACK_CAMERA = True
+except ImportError:
+    HAS_BACK_CAMERA = False
+
 try:
     from zoneinfo import ZoneInfo
     LOCAL_TZ = ZoneInfo("Europe/Warsaw")
@@ -115,7 +122,10 @@ with st.container(border=True):
         
     captured_image = None
     if st.session_state["use_camera"]:
-        captured_image = st.camera_input("Зробити фото")
+        if HAS_BACK_CAMERA:
+            captured_image = back_camera_input()
+        else:
+            captured_image = st.camera_input("Зробити фото")
 
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
