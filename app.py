@@ -102,7 +102,7 @@ def load_settings():
     if os.path.exists(SETTINGS_FILE):
         with open(SETTINGS_FILE, "r") as f:
             return json.load(f)
-    return {"calories": 1990, "protein": 160, "fat": 70, "carbs": 180}
+    return {"calories": 1990, "protein": 160, "fat": 70, "carbs": 180, "height": 178, "age": 35}
 
 def save_settings(s):
     with open(SETTINGS_FILE, "w") as f:
@@ -122,27 +122,29 @@ TARGET_PROTEIN = user_settings["protein"]
 TARGET_FAT = user_settings["fat"]
 TARGET_CARBS = user_settings["carbs"]
 BASE_CALORIE_TARGET = user_settings["calories"]
+USER_HEIGHT = user_settings.get("height", 178)
+USER_AGE = user_settings.get("age", 35)
 
 st.title("🏋️ Мій фітнес")
 
-# Кнопка для відкриття ручного редагування цілей на екрані
 col_top1, col_top2 = st.columns([3, 1])
 with col_top2:
     if st.button("⚙️ Змінити цілі"):
         st.session_state["edit_mode"] = not st.session_state["edit_mode"]
 
-# Якщо увімкнено режим редагування — показуємо поля прямо під заголовком
 if st.session_state["edit_mode"]:
     with st.container(border=True):
-        st.subheader("Редагування цілей і ваги вручну")
+        st.subheader("Редагування цілей і параметрів")
         e_cal = st.number_input("Ціль калорій (ккал)", value=int(BASE_CALORIE_TARGET), step=10)
         e_prot = st.number_input("Ціль білків (г)", value=int(TARGET_PROTEIN), step=5)
         e_fat = st.number_input("Ціль жирів (г)", value=int(TARGET_FAT), step=5)
         e_carb = st.number_input("Ціль вуглеводів (г)", value=int(TARGET_CARBS), step=5)
-        e_weight = st.number_input("Початкова вага (кг)", value=float(w_data["start_weight"]), step=0.1)
+        e_weight = st.number_input("Поточна вага (кг)", value=float(w_data["start_weight"]), step=0.1)
+        e_height = st.number_input("Зріст (см)", value=int(USER_HEIGHT), step=1)
+        e_age = st.number_input("Вік", value=int(USER_AGE), step=1)
         
         if st.button("💾 Зберегти зміни", type="primary", use_container_width=True):
-            user_settings = {"calories": e_cal, "protein": e_prot, "fat": e_fat, "carbs": e_carb}
+            user_settings = {"calories": e_cal, "protein": e_prot, "fat": e_fat, "carbs": e_carb, "height": e_height, "age": e_age}
             save_settings(user_settings)
             w_data["start_weight"] = e_weight
             with open(WEIGHT_FILE, "w") as f:
@@ -151,7 +153,7 @@ if st.session_state["edit_mode"]:
             st.rerun()
 
 with st.container(border=True):
-    user_input = st.text_input("📥 Введи, що зїв / тренування:", placeholder="Наприклад: з'їв 30г хліба або спалено 300 ккал")
+    user_input = st.text_input("📥 Введи, що зїв / тренування:", placeholder="Наприклад: з'їв 30г хліба або калорії з годинника 212")
     submit_btn = st.button("Записати", type="primary", use_container_width=True)
 
 now = datetime.now()
@@ -162,33 +164,33 @@ def load_data():
 
 df_data = load_data()
 
-# Історія (Скасувати / Повернути назад)
 if "history" not in st.session_state:
     st.session_state["history"] = []
 if "redo_stack" not in st.session_state:
     st.session_state["redo_stack"] = []
 
 if submit_btn and user_input:
-    # Зберігаємо стан перед зміною для можливості скасування
     st.session_state["history"].append(df_data.copy())
     st.session_state["redo_stack"].clear()
     
-    prompt = f'Аналізуй: "{user_input}". JSON: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
+    prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON з полями: food_description (рядок), kcal_burned (число або 0 - якщо це калорії з годинника чи тренування), total_consumed_kcal (число або 0), total_protein (число або 0), total_fat (число або 0), total_carbs (число або 0).'
     try:
         response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
         data = json.loads(response.text)
         
-        c_consumed = float(data.get("total_consumed_kcal", 0))
-        c_burned = float(data.get("kcal_burned", 0))
+        c_consumed = float(data.get("total_consumed_kcal") or 0)
+        c_burned = float(data.get("kcal_burned") or 0)
+        p_val = float(data.get("total_protein") or 0)
+        f_val = float(data.get("total_fat") or 0)
+        cb_val = float(data.get("total_carbs") or 0)
+        desc = data.get("food_description") or user_input
         
         new_entry = pd.DataFrame([{
             "Дата": date_str, "Час": time_str, 
-            "Опис": data.get("food_description", user_input), 
+            "Опис": desc, 
             "Тип": "Тренування" if c_burned > 0 else "Їжа", 
             "Спожито": c_consumed, "Спалено": c_burned, 
-            "Білки": float(data.get("total_protein", 0)), 
-            "Жири": float(data.get("total_fat", 0)), 
-            "Вуглеводи": float(data.get("total_carbs", 0))
+            "Білки": p_val, "Жири": f_val, "Вуглеводи": cb_val
         }])
         
         df_data = pd.concat([df_data, new_entry], ignore_index=True)
@@ -198,7 +200,14 @@ if submit_btn and user_input:
         day_consumed = today_entries["Спожито"].sum()
         day_burned = today_entries["Спалено"].sum()
         
-        w_data["total_deficit"] += (BASE_CALORIE_TARGET - day_consumed + day_burned)
+        # Розрахунок базового метаболізму на поточний момент дня
+        current_bmr_daily = (10 * w_data["start_weight"]) + (6.25 * USER_HEIGHT) - (5 * USER_AGE) + 5
+        hours_passed = now.hour + (now.minute / 60)
+        bmr_so_far = (current_bmr_daily / 24) * hours_passed
+        
+        total_day_burned = day_burned + bmr_so_far
+        w_data["total_deficit"] += (BASE_CALORIE_TARGET - day_consumed + total_day_burned)
+        
         with open(WEIGHT_FILE, "w") as f:
             json.dump(w_data, f)
             
@@ -206,7 +215,6 @@ if submit_btn and user_input:
         st.rerun()
     except Exception as e: st.error(f"Помилка: {e}")
 
-# Кнопки Скасувати / Повернути назад
 col_u1, col_u2 = st.columns(2)
 with col_u1:
     if st.button("↩️ Скасувати (Undo)", use_container_width=True, disabled=len(st.session_state["history"]) == 0):
@@ -225,8 +233,18 @@ with col_u2:
 
 today_df = df_data[df_data["Дата"].astype(str) == date_str]
 if not today_df.empty:
-    consumed, burned, protein, fat, carbs = today_df["Спожито"].sum(), today_df["Спалено"].sum(), today_df["Білки"].sum(), today_df["Жири"].sum(), today_df["Вуглеводи"].sum()
+    consumed = today_df["Спожито"].sum()
+    explicit_burned = today_df["Спалено"].sum()
+    protein = today_df["Білки"].sum()
+    fat = today_df["Жири"].sum()
+    carbs = today_df["Вуглеводи"].sum()
     
+    # Автоматичний розрахунок базового метаболізму за пройдений час доби
+    current_bmr_daily = (10 * w_data["start_weight"]) + (6.25 * USER_HEIGHT) - (5 * USER_AGE) + 5
+    hours_passed = now.hour + (now.minute / 60)
+    bmr_so_far = (current_bmr_daily / 24) * hours_passed
+    
+    total_burned = explicit_burned + bmr_so_far
     current_weight = w_data["start_weight"] - (w_data["total_deficit"] / 7700)
     
     st.markdown(f"**📅 {date_str} | Вага: ~{current_weight:.2f} кг**")
@@ -249,7 +267,7 @@ if not today_df.empty:
 
     c1, c2 = st.columns(2)
     c1.metric("🍽️ З'їв", f"{int(consumed)} ккал")
-    c2.metric("💪 Спалено", f"{int(burned)} ккал")
+    c2.metric("🔥 Спалено", f"{int(total_burned)} ккал")
     
     log_lines = [f"• {row['Час']} {'💪' if row['Тип'] == 'Тренування' else '🍽️'} {row['Опис']} — <b>{int(row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито'])} ккал</b>" for _, row in today_df.iterrows()]
     st.markdown(f'<div class="food-box"><b>📝 Лог:</b><br>{"<br>".join(log_lines)}</div>', unsafe_allow_html=True)
@@ -258,12 +276,12 @@ if not today_df.empty:
         st.session_state["show_advice"] = True
 
     if st.session_state["show_advice"]:
-        advice_prompt = f"""Проаналізуй харчування за сьогодні для чоловіка, який худне:
+        advice_prompt = f"""Проаналізуй харчування за сьогодні для чоловіка (зріст 178, вага 89), який худне:
         - Спожито калорій: {consumed} із норми {BASE_CALORIE_TARGET} ккал
-        - Спалено калорій: {burned} ккал
+        - Загалом спалено (база + годинник/тренування): {int(total_burned)} ккал
         - Білки: {protein}г (ціль {TARGET_PROTEIN}г)
         - Жири: {fat}г (ціль {TARGET_FAT}г)
-        - Вуглеводи: {carbs}г (ціль {TARGET_CARB}г)
+        - Вуглеводи: {carbs}г (ціль {TARGET_CARBS}г)
         
         Дай коротку, чітку пораду українською мовою: чого замало, а чого забагато в раціоні, і що варто скоригувати до кінця дня. Пиши лаконічно."""
         
