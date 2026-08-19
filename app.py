@@ -16,10 +16,11 @@ st.markdown("""
         background-position: center center;
         background-attachment: fixed;
         background-size: cover;
-        background-color: #000000;
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
     }
     div[data-testid="stMetric"], div[data-testid="stMarkdownContainer"], div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: rgba(20, 20, 20, 0.92);
+        background-color: rgba(20, 20, 20, 0.95);
         border-radius: 12px;
         padding: 10px 14px;
         color: white;
@@ -29,7 +30,7 @@ st.markdown("""
         padding-bottom: 1rem;
     }
     .food-box {
-        background-color: rgba(20, 20, 20, 0.92);
+        background-color: rgba(20, 20, 20, 0.95);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 12px;
         padding: 12px 16px;
@@ -52,7 +53,7 @@ st.markdown("""
         display: flex;
         justify-content: center;
         align-items: center;
-        box-shadow: 0 0 15px rgba(0,0,0,0.6);
+        box-shadow: 0 0 15px rgba(0,0,0,0.8);
     }
     .donut-hole {
         width: 125px;
@@ -72,7 +73,7 @@ st.markdown("""
         width: 100%;
         margin-top: 12px;
         font-size: 14px;
-        background-color: rgba(20, 20, 20, 0.92);
+        background-color: rgba(20, 20, 20, 0.95);
         padding: 10px;
         border-radius: 10px;
     }
@@ -97,7 +98,16 @@ with st.container(border=True):
     submit_btn = st.button('Записати', type='primary', use_container_width=True)
 
 if submit_btn and user_input:
-    prompt = f"""Аналізуй: "{user_input}". Поверни JSON: food_description, steps, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs."""
+    prompt = f"""Аналізуй текст: "{user_input}". 
+    Поверни обов'язково у форматі JSON такі поля (якщо якогось значення немає, став 0 або загальну суму якщо вказано лише калорії): 
+    food_description (текст опису), 
+    steps (число кроків або 0), 
+    kcal_burned (спалені калорії або 0), 
+    total_consumed_kcal (спожиті калорії), 
+    total_protein (грами білків або 0), 
+    total_fat (грами жирів або 0), 
+    total_carbs (грами вуглеводів або 0)."""
+    
     try:
         response = client.models.generate_content(model='gemini-3.6-flash', contents=prompt, config=types.GenerateContentConfig(response_mime_type='application/json'))
         data = json.loads(response.text)
@@ -108,20 +118,41 @@ if submit_btn and user_input:
         now = pd.Timestamp.today()
         date_str = now.strftime('%Y-%m-%d')
         
+        # Безпечне переведення в числа (щоб не було помилок NoneType)
+        c_consumed = float(data.get('total_consumed_kcal') or 0)
+        c_burned = float(data.get('kcal_burned') or 0)
+        c_protein = float(data.get('total_protein') or 0)
+        c_fat = float(data.get('total_fat') or 0)
+        c_carbs = float(data.get('total_carbs') or 0)
+        c_steps = float(data.get('steps') or 0)
+        c_desc = str(data.get('food_description') or user_input)
+
         if date_str in df['Дата'].astype(str).values:
             idx = df[df['Дата'].astype(str) == date_str].index[0]
-            df.loc[idx, 'Спожито (ккал)'] += float(data.get('total_consumed_kcal', 0))
-            df.loc[idx, 'Спалено (ккал)'] += float(data.get('kcal_burned', 0))
-            df.loc[idx, 'Білки (г)'] += float(data.get('total_protein', 0))
-            df.loc[idx, 'Жири (г)'] += float(data.get('total_fat', 0))
-            df.loc[idx, 'Вуглеводи (г)'] += float(data.get('total_carbs', 0))
-            df.loc[idx, 'Баланс (ккал)'] = df.loc[idx, 'Спожито (ккал)'] - df.loc[idx, 'Спалено (ккал)']
+            df.loc[idx, 'Спожито (ккал)'] = float(df.loc[idx, 'Спожито (ккал)']) + c_consumed
+            df.loc[idx, 'Спалено (ккал)'] = float(df.loc[idx, 'Спалено (ккал)']) + c_burned
+            df.loc[idx, 'Білки (г)'] = float(df.loc[idx, 'Білки (г)']) + c_protein
+            df.loc[idx, 'Жири (г)'] = float(df.loc[idx, 'Жири (г)']) + c_fat
+            df.loc[idx, 'Вуглеводи (г)'] = float(df.loc[idx, 'Вуглеводи (г)']) + c_carbs
+            df.loc[idx, 'Баланс (ккал)'] = float(df.loc[idx, 'Спожито (ккал)']) - float(df.loc[idx, 'Спалено (ккал)'])
         else:
-            new_row = pd.DataFrame({'Дата': [date_str], 'День тижня': [DAYS_UA.get(now.strftime('%A'))], 'Раціон': [data.get('food_description')], 'Кроки': [data.get('steps')], 'Спалено (ккал)': [data.get('kcal_burned')], 'Спожито (ккал)': [data.get('total_consumed_kcal')], 'Білки (г)': [data.get('total_protein')], 'Жири (г)': [data.get('total_fat')], 'Вуглеводи (г)': [data.get('total_carbs')], 'Баланс (ккал)': [data.get('total_consumed_kcal', 0) - data.get('kcal_burned', 0)]})
+            new_row = pd.DataFrame({
+                'Дата': [date_str], 
+                'День тижня': [DAYS_UA.get(now.strftime('%A'))], 
+                'Раціон': [c_desc], 
+                'Кроки': [c_steps], 
+                'Спалено (ккал)': [c_burned], 
+                'Спожито (ккал)': [c_consumed], 
+                'Білки (г)': [c_protein], 
+                'Жири (г)': [c_fat], 
+                'Вуглеводи (г)': [c_carbs], 
+                'Баланс (ккал)': [c_consumed - c_burned]
+            })
             df = pd.concat([df, new_row], ignore_index=True)
             
         df.to_excel(EXCEL_FILE, index=False)
         st.success('✅ Записано!')
+        st.rerun()
     except Exception as e:
         st.error(f'Помилка: {e}')
 
@@ -159,7 +190,6 @@ if os.path.exists(EXCEL_FILE):
 
         percent_target = min(100, int((consumed / BASE_CALORIE_TARGET) * 100))
 
-        # Пончик без плутаних відсотків БЖУ, тільки грами
         st.markdown(f"""
             <div class="donut-container">
                 <div class="donut-ring" style="{gradient_style}">
