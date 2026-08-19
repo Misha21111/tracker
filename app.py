@@ -22,6 +22,7 @@ st.markdown(
     .donut-ring {{ width: 190px; height: 190px; border-radius: 50%; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 15px rgba(0,0,0,0.8); }}
     .donut-hole {{ width: 125px; height: 125px; background-color: #141414; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white; }}
     .macros-row {{ display: flex; justify-content: space-around; width: 100%; max-width: 340px; margin-top: 12px; font-size: 12px; background-color: rgba(20, 20, 20, 0.9); padding: 8px 6px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); }}
+    .stButton button {{ width: 100%; border-radius: 10px; }}
     </style>
     """, unsafe_allow_html=True,
 )
@@ -71,9 +72,17 @@ df_data = load_data()
 
 st.title("🏋️ Мій фітнес")
 
-col_top1, col_top2 = st.columns([3, 1])
-with col_top2:
-    if st.button("⚙️ Налаштування"): st.session_state["edit_mode"] = not st.session_state["edit_mode"]
+# Кнопки управління в один акуратний ряд
+col_btn1, col_btn2 = st.columns(2)
+with col_btn1:
+    if st.button("⚙️ Налаштування", use_container_width=True): 
+        st.session_state["edit_mode"] = not st.session_state["edit_mode"]
+with col_btn2:
+    if st.button("↩️ Видалити останнє", use_container_width=True):
+        if not df_data.empty:
+            df_data = df_data.iloc[:-1]
+            df_data.to_excel(EXCEL_FILE, index=False)
+            st.rerun()
 
 if st.session_state["edit_mode"]:
     with st.container(border=True):
@@ -90,7 +99,7 @@ if st.session_state["edit_mode"]:
             st.session_state["edit_mode"] = False
             st.rerun()
 
-# Вибір дати для перегляду (сьогодні або минулі дні)
+# Вибір дати
 now = datetime.now()
 today_str = now.strftime("%Y-%m-%d")
 
@@ -105,7 +114,7 @@ selected_date = st.selectbox("📅 Вибрати день для перегля
 
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
-    submit_btn = st.button("Записати", type="primary", use_container_width=True)
+    submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
 time_str = now.strftime("%H:%M")
 
@@ -130,12 +139,6 @@ if submit_btn and user_input:
         st.rerun()
     except Exception as e: st.error(f"Помилка: {e}")
 
-if st.button("↩️ Видалити останній запис"):
-    if not df_data.empty:
-        df_data = df_data.iloc[:-1]
-        df_data.to_excel(EXCEL_FILE, index=False)
-        st.rerun()
-
 day_df = df_data[df_data["Дата"].astype(str) == selected_date] if not df_data.empty else pd.DataFrame()
 
 if not day_df.empty:
@@ -143,11 +146,10 @@ if not day_df.empty:
     explicit_burned = day_df["Спалено"].sum()
     protein, fat, carbs = day_df["Білки"].sum(), day_df["Жири"].sum(), day_df["Вуглеводи"].sum()
     
-    # Якщо дивимось сьогодні — рахуємо спалені калорії з урахуванням часу, якщо минулий день — беремо суму з логу
     if selected_date == today_str:
         total_burned = explicit_burned + (user_settings.get("bmr_daily", 1850) / 24) * (now.hour + now.minute / 60)
     else:
-        total_burned = explicit_burned + (user_settings.get("bmr_daily", 1850)) # повний день для минулих
+        total_burned = explicit_burned + (user_settings.get("bmr_daily", 1850))
 
     st.markdown(f"**📅 {selected_date} | Вага: ~{w_data.get('current_weight', 91.8):.1f} кг**")
     
@@ -184,14 +186,14 @@ if not day_df.empty:
     log_lines = [f"• {row['Час']} {'💪' if row['Тип'] == 'Тренування' else '🍽️'} {row['Опис']} — <b>{int(row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито'])} ккал</b>" for _, row in day_df.iterrows()]
     st.markdown(f'<div class="food-box"><b>📝 Лог:</b><br>{"<br>".join(log_lines)}</div>', unsafe_allow_html=True)
     
-    if st.button("💡 Порада Gemini"):
+    if st.button("💡 Порада Gemini", use_container_width=True):
         st.session_state["show_advice"] = True
 
     if st.session_state["show_advice"]:
         advice_resp = client.models.generate_content(model="gemini-3.5-flash-lite", contents=f"Аналіз за {selected_date}: {consumed} ккал, {protein}г білків. Коротка порада.")
         st.markdown(f'<div class="advice-box"><b>💡 Порада:</b><br>{advice_resp.text}</div>', unsafe_allow_html=True)
     
-    if st.button("⚠️ Очистити цей день"):
+    if st.button("⚠️ Очистити цей день", use_container_width=True):
         df_data = df_data[df_data["Дата"].astype(str) != selected_date]
         df_data.to_excel(EXCEL_FILE, index=False)
         st.rerun()
