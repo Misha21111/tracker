@@ -11,7 +11,6 @@ from google.genai import types
 st.set_page_config(page_title="Мій Фітнес", layout="centered")
 
 
-# Функція для конвертації твоєї картинки в фон без розтягування
 def get_base64_image(image_path):
     if os.path.exists(image_path):
         with open(image_path, "rb") as img_file:
@@ -19,7 +18,7 @@ def get_base64_image(image_path):
     return None
 
 
-# Шлях до твоєї картинки (поклади її в одну папки з цим скриптом і назви так само)
+# Назва твоєї картинки, яку ти завантажив на GitHub
 IMAGE_FILE = "1000023628.jpg"
 img_base64 = get_base64_image(IMAGE_FILE)
 
