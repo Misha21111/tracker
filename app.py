@@ -28,6 +28,11 @@ st.markdown("""
         padding-top: 1rem;
         padding-bottom: 1rem;
     }
+    .donut-icon {
+        text-align: center;
+        font-size: 70px;
+        margin: 10px 0;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -74,7 +79,7 @@ if submit_btn and user_input:
     except Exception as e:
         st.error(f'Помилка: {e}')
 
-# --- ВИВЕДЕННЯ КАРТИНКИ ПОНЧИКА ЗАМІСТЬ ГРАФІКА ---
+# --- ВИВЕДЕННЯ ПОНЧИКА ЗАМІСТЬ ГРАФІКА ---
 if os.path.exists(EXCEL_FILE):
     df_current = pd.read_excel(EXCEL_FILE)
     if not df_current.empty:
@@ -82,10 +87,8 @@ if os.path.exists(EXCEL_FILE):
         
         st.markdown(f"**📅 {latest['Дата']} ({latest['День тижня']})**")
 
-        # Виводимо картинку пончика акуратно по центру
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.image("https://i.ibb.co/609Jt7L/donut.png", use_container_width=True)
+        # Красивий великий пончик по центру замість зламаної картинки
+        st.markdown('<div class="donut-icon">🍩</div>', unsafe_allow_html=True)
 
         # Метрики поруч
         c1, c2 = st.columns(2)
