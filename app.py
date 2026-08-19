@@ -85,7 +85,7 @@ if submit_btn and user_input:
     except Exception as e:
         st.error(f'Помилка: {e}')
 
-# --- ВЕЛИКИЙ ПОНЧИК-ДІАГРАМА ТА ВИПРАВЛЕНИЙ ТЕКСТ ЇДИ ---
+# --- СТАБІЛЬНИЙ І ВЕЛИКИЙ ПОНЧИК ---
 if os.path.exists(EXCEL_FILE):
     df_current = pd.read_excel(EXCEL_FILE)
     if not df_current.empty:
@@ -101,24 +101,17 @@ if os.path.exists(EXCEL_FILE):
             labels=['Спожито', 'Залишок'],
             values=[consumed, remaining],
             hole=0.7,
-            marker=dict(colors=['#ff5252', '#4CAF50']),
+            marker_colors=['#ff5252', '#4CAF50'],
             textinfo='label+percent',
-            textfont=dict(size=14, color='white'),
             hoverinfo='label+value'
         )])
 
         fig.update_layout(
             showlegend=False,
             margin=dict(t=10, b=10, l=10, r=10),
-            height=320,
+            height=300,
             paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0,0)',
-            annotations=[dict(
-                text=f"<b>{int(consumed)}</b><br><span style='font-size:12px; color:#aaa;'>з {target} ккал</span>",
-                x=0.5, y=0.5,
-                font=dict(size=20, color='white'),
-                showarrow=False
-            )]
+            plot_bgcolor='rgba(0,0,0,0,0)'
         )
 
         st.plotly_chart(fig, use_container_width=True)
