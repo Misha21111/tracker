@@ -8,7 +8,6 @@ from google.genai import types
 
 st.set_page_config(page_title="Мій Фітнес", layout="centered")
 
-# Картинка через Postimages
 IMAGE_URL = "https://i.postimg.cc/kMS67m1J/Screenshot-20260819-175524-Facebook.jpg"
 
 st.markdown(
@@ -92,18 +91,13 @@ EXCEL_FILE = "fitness_entries.xlsx"
 WEIGHT_FILE = "weight_data.json"
 SETTINGS_FILE = "user_settings.json"
 
-DAYS_UA = {
-    "Monday": "Понеділок", "Tuesday": "Вівторок", "Wednesday": "Середа",
-    "Thursday": "Четвер", "Friday": "П’ятниця", "Saturday": "Субота", "Sunday": "Неділя",
-}
-
 if "show_advice" not in st.session_state: st.session_state["show_advice"] = False
+if "edit_mode" not in st.session_state: st.session_state["edit_mode"] = False
 
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 if not api_key: st.error("⚠️ Не знайдено API ключ!"); st.stop()
 client = genai.Client(api_key=api_key)
 
-# Завантаження/Збереження налаштувань цілей
 def load_settings():
     if os.path.exists(SETTINGS_FILE):
         with open(SETTINGS_FILE, "r") as f:
@@ -124,31 +118,37 @@ def load_weight():
 
 w_data = load_weight()
 
-# Налаштування в боковій панелі (щоб змінювати цифри вручну)
-with st.sidebar:
-    st.header("⚙️ Налаштування цілей")
-    new_cal = st.number_input("Ціль калорій (ккал)", value=user_settings["calories"], step=10)
-    new_prot = st.number_input("Ціль білків (г)", value=user_settings["protein"], step=5)
-    new_fat = st.number_input("Ціль жирів (г)", value=user_settings["fat"], step=5)
-    new_carb = st.number_input("Ціль вуглеводів (г)", value=user_settings["carbs"], step=5)
-    
-    new_start_w = st.number_input("Стартова вага (кг)", value=w_data["start_weight"], step=0.1)
-    
-    if st.button("Зберегти налаштування", use_container_width=True):
-        user_settings = {"calories": new_cal, "protein": new_prot, "fat": new_fat, "carbs": new_carb}
-        save_settings(user_settings)
-        w_data["start_weight"] = new_start_w
-        with open(WEIGHT_FILE, "w") as f:
-            json.dump(w_data, f)
-        st.success("Збережено!")
-        st.rerun()
-
 TARGET_PROTEIN = user_settings["protein"]
 TARGET_FAT = user_settings["fat"]
 TARGET_CARBS = user_settings["carbs"]
 BASE_CALORIE_TARGET = user_settings["calories"]
 
 st.title("🏋️ Мій фітнес")
+
+# Кнопка для відкриття ручного редагування цілей на екрані
+col_top1, col_top2 = st.columns([3, 1])
+with col_top2:
+    if st.button("⚙️ Змінити цілі"):
+        st.session_state["edit_mode"] = not st.session_state["edit_mode"]
+
+# Якщо увімкнено режим редагування — показуємо поля прямо під заголовком
+if st.session_state["edit_mode"]:
+    with st.container(border=True):
+        st.subheader("Редагування цілей і ваги вручну")
+        e_cal = st.number_input("Ціль калорій (ккал)", value=int(BASE_CALORIE_TARGET), step=10)
+        e_prot = st.number_input("Ціль білків (г)", value=int(TARGET_PROTEIN), step=5)
+        e_fat = st.number_input("Ціль жирів (г)", value=int(TARGET_FAT), step=5)
+        e_carb = st.number_input("Ціль вуглеводів (г)", value=int(TARGET_CARBS), step=5)
+        e_weight = st.number_input("Початкова вага (кг)", value=float(w_data["start_weight"]), step=0.1)
+        
+        if st.button("💾 Зберегти зміни", type="primary", use_container_width=True):
+            user_settings = {"calories": e_cal, "protein": e_prot, "fat": e_fat, "carbs": e_carb}
+            save_settings(user_settings)
+            w_data["start_weight"] = e_weight
+            with open(WEIGHT_FILE, "w") as f:
+                json.dump(w_data, f)
+            st.session_state["edit_mode"] = False
+            st.rerun()
 
 with st.container(border=True):
     user_input = st.text_input("📥 Введи, що зїв / тренування:", placeholder="Наприклад: з'їв 30г хліба або спалено 300 ккал")
@@ -162,7 +162,17 @@ def load_data():
 
 df_data = load_data()
 
+# Історія (Скасувати / Повернути назад)
+if "history" not in st.session_state:
+    st.session_state["history"] = []
+if "redo_stack" not in st.session_state:
+    st.session_state["redo_stack"] = []
+
 if submit_btn and user_input:
+    # Зберігаємо стан перед зміною для можливості скасування
+    st.session_state["history"].append(df_data.copy())
+    st.session_state["redo_stack"].clear()
+    
     prompt = f'Аналізуй: "{user_input}". JSON: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
     try:
         response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
@@ -195,6 +205,23 @@ if submit_btn and user_input:
         st.session_state["show_advice"] = False
         st.rerun()
     except Exception as e: st.error(f"Помилка: {e}")
+
+# Кнопки Скасувати / Повернути назад
+col_u1, col_u2 = st.columns(2)
+with col_u1:
+    if st.button("↩️ Скасувати (Undo)", use_container_width=True, disabled=len(st.session_state["history"]) == 0):
+        if st.session_state["history"]:
+            st.session_state["redo_stack"].append(df_data.copy())
+            df_data = st.session_state["history"].pop()
+            df_data.to_excel(EXCEL_FILE, index=False)
+            st.rerun()
+with col_u2:
+    if st.button("🔁 Повернути (Redo)", use_container_width=True, disabled=len(st.session_state["redo_stack"]) == 0):
+        if st.session_state["redo_stack"]:
+            st.session_state["history"].append(df_data.copy())
+            df_data = st.session_state["redo_stack"].pop()
+            df_data.to_excel(EXCEL_FILE, index=False)
+            st.rerun()
 
 today_df = df_data[df_data["Дата"].astype(str) == date_str]
 if not today_df.empty:
@@ -236,7 +263,7 @@ if not today_df.empty:
         - Спалено калорій: {burned} ккал
         - Білки: {protein}г (ціль {TARGET_PROTEIN}г)
         - Жири: {fat}г (ціль {TARGET_FAT}г)
-        - Вуглеводи: {carbs}г (ціль {TARGET_CARBS}г)
+        - Вуглеводи: {carbs}г (ціль {TARGET_CARB}г)
         
         Дай коротку, чітку пораду українською мовою: чого замало, а чого забагато в раціоні, і що варто скоригувати до кінця дня. Пиши лаконічно."""
         
