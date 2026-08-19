@@ -54,7 +54,7 @@ def save_settings(s):
 user_settings = load_settings()
 w_data = json.load(open(WEIGHT_FILE, "r")) if os.path.exists(WEIGHT_FILE) else {"start_weight": 89.0, "total_deficit": 0.0}
 
-st.title("🏋️ Мій фітнес")
+st.title(" 🏋‍♂️GYM")
 
 col_top1, col_top2 = st.columns([3, 1])
 with col_top2:
