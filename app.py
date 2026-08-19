@@ -53,22 +53,6 @@ st.markdown(
         color: #36A2EB;
     }}
     </style>
-    
-    <script>
-    document.addEventListener("DOMContentLoaded", function() {{
-        setTimeout(() => {{
-            const videos = document.querySelectorAll("video");
-            videos.forEach(v => {{
-                if (v.srcObject) {{
-                    const tracks = v.srcObject.getVideoTracks();
-                    tracks.forEach(track => {{
-                        track.applyConstraints({{ facingMode: {{ exact: "environment" }} }}).catch(e => console.log(e));
-                    }});
-                }}
-            }});
-        }}, 1000);
-    }});
-    </script>
     """, unsafe_allow_html=True,
 )
 
@@ -135,19 +119,17 @@ st.title("🏋️ Мій фітнес")
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     
-    camera_photo = None
-    with st.expander("📷 Сканер 📸"):
-        camera_photo = st.camera_input("Зробити знімок їжі", key="back_camera")
+    # Використовуємо file_uploader з підтримкою камери — на телефоні це дозволяє обрати задню камеру або знімок
+    uploaded_photo = st.file_uploader("📸 Зробити фото / Обрати з галереї", type=["jpg", "jpeg", "png"])
         
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
-# Обробка збереження (якщо натиснули кнопку або зробили фото)
 should_process = False
 is_camera = False
 
 if submit_btn and user_input:
     should_process = True
-elif camera_photo is not None:
+elif uploaded_photo is not None:
     should_process = True
     is_camera = True
 
@@ -156,18 +138,18 @@ if should_process:
     current_date_str = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
     
     try:
-        if is_camera and camera_photo:
-            image_bytes = camera_photo.getvalue()
+        if is_camera and uploaded_photo:
+            image_bytes = uploaded_photo.getvalue()
             image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
             prompt = "Проаналізуй цю страву на фото. Визнач що це, приблизну вагу, калорії та БЖВ. Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs."
-            response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=[image_part, prompt], config=types.GenerateContentConfig(response_mime_type="application/json"))
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=[image_part, prompt], config=types.GenerateContentConfig(response_mime_type="application/json"))
         else:
             prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
-            response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
             
         data = json.loads(response.text)
         
-        f_desc = data.get("food_description") or (user_input if not is_camera else "Фото з камери")
+        f_desc = data.get("food_description") or (user_input if not is_camera else "Фото їжі")
         k_burned = clean_float(data.get("kcal_burned"))
         c_consumed = clean_float(data.get("total_consumed_kcal"))
         prot = clean_float(data.get("total_protein"))
@@ -297,7 +279,7 @@ if not day_df.empty:
         st.session_state["show_advice"] = True
 
     if st.session_state["show_advice"]:
-        advice_resp = client.models.generate_content(model="gemini-3.5-flash-lite", contents=f"Аналіз за {selected_date}: {consumed} ккал, {protein}г білків. Коротка порада.")
+        advice_resp = client.models.generate_content(model="gemini-2.5-flash", contents=f"Аналіз за {selected_date}: {consumed} ккал, {protein}г білків. Коротка порада.")
         st.markdown(f'<div class="advice-box"><b>💡 Порада:</b><br>{advice_resp.text}</div>', unsafe_allow_html=True)
     
     if st.button("⚠️ Очистити цей день", use_container_width=True):
