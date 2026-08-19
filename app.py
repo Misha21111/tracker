@@ -6,23 +6,30 @@ import plotly.express as px
 from google import genai
 from google.genai import types
 
-# --- НАЛАШТУВАННЯ СТИЛЮ ТА ТВОГО ФОНУ ---
+# --- НАЛАШТУВАННЯ СТИЛЮ ТА КОМПАКТНОСТІ ---
 st.set_page_config(page_title='Мій Фітнес', layout='centered')
 
 st.markdown("""
     <style>
     .stApp {
         background: url("https://i.ibb.co/jXZnnG5/IMG-20260819-144933.jpg");
-        background-size: cover;
-        background-position: center;
+        background-repeat: no-repeat;
+        background-position: center top;
         background-attachment: fixed;
+        background-size: cover;
+        background-color: #0e1117;
     }
-    /* Напівпрозорий темний шар для блоків, щоб текст було ідеально видно на фоні */
+    /* Компактні напівпрозорі блоки, щоб усе влізло на екран */
     div[data-testid="stMetric"], div[data-testid="stMarkdownContainer"], div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: rgba(15, 15, 15, 0.82);
-        border-radius: 12px;
-        padding: 10px;
+        background-color: rgba(15, 15, 15, 0.88);
+        border-radius: 10px;
+        padding: 6px 10px;
         color: white;
+    }
+    /* Зменшуємо зайві відступи між елементами */
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -38,7 +45,7 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-st.title("🏋️ Мій фітнес-прогрес")
+st.title("🏋️ Мій фітнес")
 
 with st.container(border=True):
     user_input = st.text_input('📥 Введіть дані:', placeholder="Наприклад: з'їв 30г хліба, спалено 300 ккал")
@@ -70,16 +77,15 @@ if submit_btn and user_input:
     except Exception as e:
         st.error(f'Помилка: {e}')
 
-# --- ВІДОБРАЖЕННЯ ДАНИХ ТА КРУГОВОЇ ДІАГРАМИ ---
+# --- КОМПАКТНЕ ВІДОБРАЖЕННЯ НА ОДИН ЕКРАН ---
 if os.path.exists(EXCEL_FILE):
     df_current = pd.read_excel(EXCEL_FILE)
     if not df_current.empty:
         latest = df_current.sort_values(by='Дата', ascending=False).iloc[0]
         
-        st.divider()
-        st.subheader(f"📅 Останній запис: {latest['Дата']} ({latest['День тижня']})")
+        st.markdown(f"**📅 {latest['Дата']} ({latest['День тижня']})**")
 
-        # Кругова діаграма (пончик) із твоїм фоном
+        # Компактна кругова діаграма (пончик)
         chart_data = pd.DataFrame({
             'Показник': ['Спожито', 'Спалено'],
             'Ккал': [float(latest['Спожито (ккал)']), float(latest['Спалено (ккал)'])]
@@ -89,7 +95,7 @@ if os.path.exists(EXCEL_FILE):
             chart_data, 
             values='Ккал', 
             names='Показник', 
-            hole=0.6,
+            hole=0.65,
             color='Показник',
             color_discrete_map={'Спожито': '#FF5252', 'Спалено': '#4CAF50'}
         )
@@ -97,14 +103,15 @@ if os.path.exists(EXCEL_FILE):
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
             font_color='white',
-            margin=dict(t=10, b=10, l=10, r=10),
-            height=250
+            margin=dict(t=0, b=0, l=0, r=0),
+            height=180,  # Зменшено висоту, щоб не розтягувалося
+            showlegend=False
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # Метрики та раціон
+        # Метрики поруч
         c1, c2 = st.columns(2)
-        c1.metric("🥗 Їжа", f"{int(latest['Спожито (ккал)'])} ккал")
-        c2.metric("🔥 Спорт", f"{int(latest['Спалено (ккал)'])} ккал")
+        c1.metric("🥗 Їжа", f"{int(latest['Спожито (ккал)'])}")
+        c2.metric("🔥 Спорт", f"{int(latest['Спалено (ккал)'])}")
         
-        st.info(f"🍱 **Що їв:** {latest['Раціон']}")
+        st.info(f"🍱 {latest['Раціон']}")
