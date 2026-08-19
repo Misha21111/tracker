@@ -5,6 +5,7 @@ import json
 import os
 from google import genai
 from google.genai import types
+from PIL import Image
 
 try:
     from zoneinfo import ZoneInfo
@@ -108,18 +109,25 @@ st.title("🏋️ Мій фітнес")
 
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
+    uploaded_photo = st.file_uploader("📷 Або сфотографуй їжу:", type=["jpg", "jpeg", "png"])
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
-if submit_btn and user_input:
+if submit_btn and (user_input or uploaded_photo):
     current_time_str = datetime.now(LOCAL_TZ).strftime("%H:%M")
     current_date_str = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
     
-    prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
     try:
-        response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
+        if uploaded_photo:
+            image = Image.open(uploaded_photo)
+            prompt = "Проаналізуй цю страву на фото. Визнач що це, приблизну вагу, калорії та БЖВ. Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs."
+            response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=[image, prompt], config=types.GenerateContentConfig(response_mime_type="application/json"))
+        else:
+            prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
+            response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
+            
         data = json.loads(response.text)
         
-        f_desc = data.get("food_description") or user_input
+        f_desc = data.get("food_description") or (user_input if not uploaded_photo else "Фото їжі")
         k_burned = float(data.get("kcal_burned") or 0)
         c_consumed = float(data.get("total_consumed_kcal") or 0)
         prot = float(data.get("total_protein") or 0)
@@ -154,7 +162,6 @@ selected_date = st.selectbox("📅 Вибрати день для перегля
 if st.button("⚙️ Налаштування", use_container_width=True): 
     st.session_state["edit_mode"] = not st.session_state["edit_mode"]
 
-# Кнопки «Видалити» та «Повернути» тепер на повну ширину одна під одною
 btn_del = st.button("🗑️ Видалити", use_container_width=True)
 has_trash = os.path.exists(TRASH_FILE)
 btn_back = st.button("🔄 Повернути", disabled=not has_trash, use_container_width=True)
