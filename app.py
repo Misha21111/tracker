@@ -32,8 +32,6 @@ SETTINGS_FILE = "user_settings.json"
 
 if "show_advice" not in st.session_state: st.session_state["show_advice"] = False
 if "edit_mode" not in st.session_state: st.session_state["edit_mode"] = False
-if "history" not in st.session_state: st.session_state["history"] = []
-if "redo_stack" not in st.session_state: st.session_state["redo_stack"] = []
 
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 if not api_key: 
@@ -95,29 +93,10 @@ with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     submit_btn = st.button("Записати", type="primary", use_container_width=True)
 
-col_u1, col_u2 = st.columns(2)
-with col_u1:
-    if st.button("↩️ Скасувати (Undo)", use_container_width=True, disabled=len(st.session_state["history"]) == 0):
-        if st.session_state["history"]:
-            st.session_state["redo_stack"].append(df_data.copy())
-            df_data = st.session_state["history"].pop()
-            df_data.to_excel(EXCEL_FILE, index=False)
-            st.rerun()
-with col_u2:
-    if st.button("🔁 Повернути (Redo)", use_container_width=True, disabled=len(st.session_state["redo_stack"]) == 0):
-        if st.session_state["redo_stack"]:
-            st.session_state["history"].append(df_data.copy())
-            df_data = st.session_state["redo_stack"].pop()
-            df_data.to_excel(EXCEL_FILE, index=False)
-            st.rerun()
-
 now = datetime.now()
 date_str, time_str = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
 
 if submit_btn and user_input:
-    st.session_state["history"].append(df_data.copy())
-    st.session_state["redo_stack"].clear()
-    
     prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON з полями: food_description (рядок), kcal_burned (число або 0), total_consumed_kcal (число або 0), total_protein (число або 0), total_fat (число або 0), total_carbs (число або 0).'
     try:
         response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
@@ -143,6 +122,13 @@ if submit_btn and user_input:
         st.rerun()
     except Exception as e: 
         st.error(f"Помилка: {e}")
+
+# Кнопка видалення останнього запису працює стабільно
+if st.button("↩️ Видалити останній запис", use_container_width=True):
+    if not df_data.empty:
+        df_data = df_data.iloc[:-1]
+        df_data.to_excel(EXCEL_FILE, index=False)
+        st.rerun()
 
 today_df = df_data[df_data["Дата"].astype(str) == date_str] if not df_data.empty else pd.DataFrame()
 
