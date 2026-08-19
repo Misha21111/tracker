@@ -124,10 +124,10 @@ selected_date = st.selectbox("📅 Вибрати день для перегля
 if st.button("⚙️ Налаштування", use_container_width=True): 
     st.session_state["edit_mode"] = not st.session_state["edit_mode"]
 
-# 4. Кнопки «Видалити останнє» та «Повернути» — чітко в один рядок через st.columns(2)
+# 4. Кнопки «Видалити останнє» та «Повернути» — чітко в один рядок
 col1, col2 = st.columns(2)
 with col1:
-    if st.button("🗑️ Видалити останнє", use_container_width=True):
+    if st.button("🗑️ Видалити", use_container_width=True):
         if not df_data.empty:
             last_row = df_data.iloc[-1:].to_dict(orient="records")
             with open(TRASH_FILE, "w") as f: json.dump(last_row, f)
@@ -205,6 +205,7 @@ if not day_df.empty:
     c1.metric("🍽️ З'їв", f"{int(consumed)} ккал")
     c2.metric("🔥 Спалено", f"{int(total_burned)} ккал")
     
+    # Використовуємо реальний час із стовпця 'Час' у DataFrame замість того, що випадково згенерувала модель
     log_lines = [f"• {row['Час']} {'💪' if row['Тип'] == 'Тренування' else '🍽️'} {row['Опис']} — <b>{int(row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито'])} ккал</b>" for _, row in day_df.iterrows()]
     st.markdown(f'<div class="food-box"><b>📝 Лог:</b><br>{"<br>".join(log_lines)}</div>', unsafe_allow_html=True)
     
