@@ -99,11 +99,11 @@ with st.container(border=True):
 
 if submit_btn and user_input:
     prompt = f"""Аналізуй текст: "{user_input}". 
-    Поверни обов'язково у форматі JSON такі поля (якщо якогось значення немає, став 0 або загальну суму якщо вказано лише калорії): 
-    food_description (текст опису), 
+    Поверни обов'язково у форматі JSON такі поля: 
+    food_description (опис їжі або те що введено), 
     steps (число кроків або 0), 
     kcal_burned (спалені калорії або 0), 
-    total_consumed_kcal (спожиті калорії), 
+    total_consumed_kcal (спожиті калорії з тексту), 
     total_protein (грами білків або 0), 
     total_fat (грами жирів або 0), 
     total_carbs (грами вуглеводів або 0)."""
@@ -118,7 +118,6 @@ if submit_btn and user_input:
         now = pd.Timestamp.today()
         date_str = now.strftime('%Y-%m-%d')
         
-        # Безпечне переведення в числа (щоб не було помилок NoneType)
         c_consumed = float(data.get('total_consumed_kcal') or 0)
         c_burned = float(data.get('kcal_burned') or 0)
         c_protein = float(data.get('total_protein') or 0)
@@ -129,6 +128,11 @@ if submit_btn and user_input:
 
         if date_str in df['Дата'].astype(str).values:
             idx = df[df['Дата'].astype(str) == date_str].index[0]
+            
+            # Додаємо до списку їжі новий рядок через кому/крапку з комою, щоб бачити що саме ти додав
+            old_desc = str(df.loc[idx, 'Раціон'])
+            df.loc[idx, 'Раціон'] = f"{old_desc}; {c_desc}" if old_desc else c_desc
+            
             df.loc[idx, 'Спожито (ккал)'] = float(df.loc[idx, 'Спожито (ккал)']) + c_consumed
             df.loc[idx, 'Спалено (ккал)'] = float(df.loc[idx, 'Спалено (ккал)']) + c_burned
             df.loc[idx, 'Білки (г)'] = float(df.loc[idx, 'Білки (г)']) + c_protein
@@ -146,8 +150,10 @@ if submit_btn and user_input:
                 'Білки (г)': [c_protein], 
                 'Жири (г)': [c_fat], 
                 'Вуглеводи (г)': [c_carbs], 
-                'Баланс (ккал)': [c_consumed - c_burned]
+                'Баланс (ккал)deselect': [c_consumed - c_burned]
             })
+            # Виправляємо назву колонки Баланс без помилок
+            new_row.columns = ['Дата', 'День тижня', 'Раціон', 'Кроки', 'Спалено (ккал)', 'Спожито (ккал)', 'Білки (г)', 'Жири (г)', 'Вуглеводи (г)', 'Баланс (ккал)']
             df = pd.concat([df, new_row], ignore_index=True)
             
         df.to_excel(EXCEL_FILE, index=False)
