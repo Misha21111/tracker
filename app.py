@@ -42,7 +42,7 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 def load_settings():
-    default = {"calories": 1990, "protein": 160, "fat": 70, "carbs": 180, "bmr_daily": 1850}
+    default = {"calories": 2000, "protein": 160, "fat": 70, "carbs": 180, "bmr_daily": 1850}
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, "r") as f: return {**default, **json.load(f)}
@@ -57,7 +57,7 @@ def load_weight():
         try:
             with open(WEIGHT_FILE, "r") as f: return json.load(f)
         except: pass
-    return {"current_weight": 91.8}
+    return {"current_weight": 89.0}
 
 def save_weight(w):
     with open(WEIGHT_FILE, "w") as f: json.dump(w, f)
@@ -77,7 +77,7 @@ now = datetime.now()
 today_str = now.strftime("%Y-%m-%d")
 time_str = now.strftime("%H:%M")
 
-# 1. Поле введення їжі — НАЙПЕРШЕ
+# 1. Поле введення їжі — зверху
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
@@ -110,7 +110,7 @@ if submit_btn and user_input:
         st.rerun()
     except Exception as e: st.error(f"Помилка: {e}")
 
-# 2. Решта елементів нижче
+# 2. Вибір дня для перегляду
 available_dates = [today_str]
 if not df_data.empty and "Дата" in df_data.columns:
     unique_dates = sorted(df_data["Дата"].astype(str).unique(), reverse=True)
@@ -120,10 +120,11 @@ if not df_data.empty and "Дата" in df_data.columns:
 
 selected_date = st.selectbox("📅 Вибрати день для перегляду:", available_dates)
 
+# 3. Кнопка Налаштування
 if st.button("⚙️ Налаштування", use_container_width=True): 
     st.session_state["edit_mode"] = not st.session_state["edit_mode"]
 
-# 3. Кнопки «Видалити останнє» та «Повернути» — чітко в один рядок
+# 4. Кнопки «Видалити останнє» та «Повернути» — чітко в один рядок через st.columns(2)
 col1, col2 = st.columns(2)
 with col1:
     if st.button("🗑️ Видалити останнє", use_container_width=True):
@@ -150,7 +151,7 @@ if st.session_state["edit_mode"]:
         e_prot = st.number_input("Ціль білків (г)", value=int(user_settings["protein"]), step=5)
         e_fat = st.number_input("Ціль жирів (г)", value=int(user_settings["fat"]), step=5)
         e_carb = st.number_input("Ціль вуглеводів (г)", value=int(user_settings["carbs"]), step=5)
-        e_weight = st.number_input("Актуальна вага (кг)", value=float(w_data.get("current_weight", 91.8)), step=0.1)
+        e_weight = st.number_input("Актуальна вага (кг)", value=float(w_data.get("current_weight", 89.0)), step=0.1)
         
         if st.button("💾 Зберегти зміни", type="primary", use_container_width=True):
             save_settings({"calories": e_cal, "protein": e_prot, "fat": e_fat, "carbs": e_carb, "bmr_daily": user_settings.get("bmr_daily", 1850)})
@@ -172,7 +173,7 @@ if not day_df.empty:
     else:
         total_burned = explicit_burned + bmr_total
 
-    st.markdown(f"**📅 {selected_date} | Вага: ~{w_data.get('current_weight', 91.8):.1f} кг**")
+    st.markdown(f"**📅 {selected_date} | Вага: ~{w_data.get('current_weight', 89.0):.1f} кг**")
     
     target_cal = user_settings["calories"]
     percent_target = min(100, int((consumed / target_cal) * 100)) if target_cal > 0 else 0
