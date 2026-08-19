@@ -6,7 +6,6 @@ import os
 from google import genai
 from google.genai import types
 from PIL import Image
-import io
 
 try:
     from zoneinfo import ZoneInfo
@@ -110,17 +109,17 @@ st.title("🏋️ Мій фітнес")
 
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
-    uploaded_photo = st.file_uploader("📷 Сканер", type=["jpg", "jpeg", "png"])
+    camera_photo = st.camera_input("📷 Сканер")
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
-if submit_btn and (user_input or uploaded_photo):
+if submit_btn and (user_input or camera_photo):
     current_time_str = datetime.now(LOCAL_TZ).strftime("%H:%M")
     current_date_str = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
     
     try:
-        if uploaded_photo:
-            image_bytes = uploaded_photo.getvalue()
-            image_part = types.Part.from_bytes(data=image_bytes, mime_type=uploaded_photo.type)
+        if camera_photo:
+            image_bytes = camera_photo.getvalue()
+            image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
             prompt = "Проаналізуй цю страву на фото. Визнач що це, приблизну вагу, калорії та БЖВ. Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs."
             response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=[image_part, prompt], config=types.GenerateContentConfig(response_mime_type="application/json"))
         else:
@@ -129,7 +128,7 @@ if submit_btn and (user_input or uploaded_photo):
             
         data = json.loads(response.text)
         
-        f_desc = data.get("food_description") or (user_input if not uploaded_photo else "Фото їжі")
+        f_desc = data.get("food_description") or (user_input if not camera_photo else "Фото з камери")
         k_burned = float(data.get("kcal_burned") or 0)
         c_consumed = float(data.get("total_consumed_kcal") or 0)
         prot = float(data.get("total_protein") or 0)
