@@ -101,6 +101,16 @@ def load_data():
         return df
     return pd.DataFrame(columns=["Дата", "Час", "Опис", "Тип", "Спожито", "Спалено", "Білки", "Жири", "Вуглеводи"])
 
+def clean_float(val):
+    if val is None: return 0.0
+    if isinstance(val, (int, float)): return float(val)
+    # Видаляємо все, крім цифр, крапки та мінуса
+    cleaned = "".join([c for c in str(val) if c.isdigit() or c in ['.', '-']])
+    try:
+        return float(cleaned) if cleaned else 0.0
+    except:
+        return 0.0
+
 user_settings = load_settings()
 w_data = load_weight()
 df_data = load_data()
@@ -109,7 +119,11 @@ st.title("🏋️ Мій фітнес")
 
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
-    camera_photo = st.camera_input("📷 Сканер")
+    
+    camera_photo = None
+    with st.expander("📷 Сканер"):
+        camera_photo = st.camera_input("Зробити знімок їжі")
+        
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
 if submit_btn and (user_input or camera_photo):
@@ -129,11 +143,11 @@ if submit_btn and (user_input or camera_photo):
         data = json.loads(response.text)
         
         f_desc = data.get("food_description") or (user_input if not camera_photo else "Фото з камери")
-        k_burned = float(data.get("kcal_burned") or 0)
-        c_consumed = float(data.get("total_consumed_kcal") or 0)
-        prot = float(data.get("total_protein") or 0)
-        fat_val = float(data.get("total_fat") or 0)
-        carb = float(data.get("total_carbs") or 0)
+        k_burned = clean_float(data.get("kcal_burned"))
+        c_consumed = clean_float(data.get("total_consumed_kcal"))
+        prot = clean_float(data.get("total_protein"))
+        fat_val = clean_float(data.get("total_fat"))
+        carb = clean_float(data.get("total_carbs"))
         
         new_entry = pd.DataFrame([{
             "Дата": current_date_str, "Час": current_time_str, "Опис": f_desc, 
