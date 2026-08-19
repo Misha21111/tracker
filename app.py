@@ -38,35 +38,25 @@ st.markdown("""
         line-height: 1.5;
         margin-top: 10px;
     }
-    .macros-box {
-        background-color: rgba(20, 20, 20, 0.92);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        padding: 10px 14px;
-        color: #ddd;
-        font-size: 14px;
-        text-align: center;
-        margin-top: 10px;
-    }
     .donut-container {
         display: flex;
-        justify-content: center;
+        flex-direction: column;
         align-items: center;
-        margin: 20px 0;
+        justify-content: center;
+        margin: 15px 0;
     }
     .donut-ring {
-        width: 180px;
-        height: 180px;
+        width: 190px;
+        height: 190px;
         border-radius: 50%;
-        background: conic-gradient(#ff5252 var(--deg), #4CAF50 0deg);
         display: flex;
         justify-content: center;
         align-items: center;
-        box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        box-shadow: 0 0 15px rgba(0,0,0,0.6);
     }
     .donut-hole {
-        width: 120px;
-        height: 120px;
+        width: 125px;
+        height: 125px;
         background-color: #141414;
         border-radius: 50%;
         display: flex;
@@ -75,6 +65,16 @@ st.markdown("""
         align-items: center;
         text-align: center;
         color: white;
+    }
+    .macros-row {
+        display: flex;
+        justify-content: space-around;
+        width: 100%;
+        margin-top: 12px;
+        font-size: 14px;
+        background-color: rgba(20, 20, 20, 0.92);
+        padding: 10px;
+        border-radius: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -93,7 +93,7 @@ client = genai.Client(api_key=api_key)
 st.title("🏋️ Мій фітнес")
 
 with st.container(border=True):
-    user_input = st.text_input('📥 Введіть дані:', placeholder="Наприклад: з'їв 30г хліба, спалено 300 ккал")
+    user_input = st.text_input('📥 Введи, що зїв / тренування:', placeholder="Наприклад: з'їв 30г хліба, спалено 300 ккал")
     submit_btn = st.button('Записати', type='primary', use_container_width=True)
 
 if submit_btn and user_input:
@@ -125,7 +125,7 @@ if submit_btn and user_input:
     except Exception as e:
         st.error(f'Помилка: {e}')
 
-# --- ВІДОБРАЖЕННЯ ІНФОРМАЦІЇ ---
+# --- ВИВЕДЕННЯ ІНФОРМАЦІЇ ---
 if os.path.exists(EXCEL_FILE):
     df_current = pd.read_excel(EXCEL_FILE)
     if not df_current.empty:
@@ -133,43 +133,58 @@ if os.path.exists(EXCEL_FILE):
         
         st.markdown(f"**📅 {latest['Дата']} ({latest['День тижня']})**")
 
-        consumed = float(latest['Спожито (ккал)'])
-        target = BASE_CALORIE_TARGET
-        
-        percent = min(100, int((consumed / target) * 100)) if target > 0 else 0
-        deg = int((percent / 100) * 360)
+        consumed = float(latest.get('Спожито (ккал)', 0))
+        burned = float(latest.get('Спалено (ккал)', 0))
+        protein = float(latest.get('Білки (г)', 0))
+        fat = float(latest.get('Жири (г)', 0))
+        carbs = float(latest.get('Вуглеводи (г)', 0))
 
-        # Великий пончик
+        # Розрахунок калорій з БЖУ для градієнта пончика
+        p_kcal = protein * 4
+        f_kcal = fat * 9
+        c_kcal = carbs * 4
+        total_macro_kcal = p_kcal + f_kcal + c_kcal
+
+        if total_macro_kcal > 0:
+            p_pct = round((p_kcal / total_macro_kcal) * 100)
+            f_pct = round((f_kcal / total_macro_kcal) * 100)
+            c_pct = 100 - p_pct - f_pct
+            
+            p_deg = int((p_pct / 100) * 360)
+            pf_deg = p_deg + int((f_pct / 100) * 360)
+            gradient_style = f"background: conic-gradient(#36A2EB 0deg {p_deg}deg, #FFCE56 {p_deg}deg {pf_deg}deg, #FF6384 {pf_deg}deg 360deg);"
+        else:
+            p_pct, f_pct, c_pct = 0, 0, 0
+            gradient_style = "background: #333;"
+
+        percent_target = min(100, int((consumed / BASE_CALORIE_TARGET) * 100))
+
+        # Пончик з БЖУ та калоріями всередині
         st.markdown(f"""
             <div class="donut-container">
-                <div class="donut-ring" style="--deg: {deg}deg;">
+                <div class="donut-ring" style="{gradient_style}">
                     <div class="donut-hole">
-                        <span style="font-size: 22px; font-weight: bold;">{int(consumed)}</span>
-                        <span style="font-size: 11px; color: #aaa;">з {target} ккал</span>
-                        <span style="font-size: 13px; color: #ff5252; margin-top: 2px;"><b>{percent}%</b></span>
+                        <span style="font-size: 20px; font-weight: bold;">{int(consumed)}</span>
+                        <span style="font-size: 11px; color: #aaa;">із {BASE_CALORIE_TARGET} ккал</span>
+                        <span style="font-size: 12px; color: #4CAF50; margin-top: 2px;"><b>{percent_target}% від норми</b></span>
                     </div>
+                </div>
+                <div class="macros-row">
+                    <span style="color:#36A2EB;">🥩 Білки: <b>{protein:.0f}г</b> ({p_pct}%)</span>
+                    <span style="color:#FFCE56;">🥑 Жири: <b>{fat:.0f}г</b> ({f_pct}%)</span>
+                    <span style="color:#FF6384;">🍞 Вугл: <b>{carbs:.0f}г</b> ({c_pct}%)</span>
                 </div>
             </div>
         """, unsafe_allow_html=True)
 
+        # Зрозумілі картки
         c1, c2 = st.columns(2)
-        c1.metric("🥗 Їжа", f"{int(consumed)} ккал")
-        c2.metric("🔥 Спорт", f"{int(latest['Спалено (ккал)'])} ккал")
+        c1.metric("🍽️ З'їв за день", f"{int(consumed)} ккал")
+        c2.metric("💪 Спалено на тренуванні", f"{int(burned)} ккал")
         
-        # БЖУ блок
-        protein = round(float(latest.get('Білки (г)', 0)), 1)
-        fat = round(float(latest.get('Жири (г)', 0)), 1)
-        carbs = round(float(latest.get('Вуглеводи (г)', 0)), 1)
-        
-        st.markdown(f"""
-            <div class="macros-box">
-                🥩 <b>Білки:</b> {protein}г &nbsp;&nbsp;|&nbsp;&nbsp; 🥑 <b>Жири:</b> {fat}г &nbsp;&nbsp;|&nbsp;&nbsp; 🍞 <b>Вуглеводи:</b> {carbs}г
-            </div>
-        """, unsafe_allow_html=True)
-
-        # Блок раціону
+        # Що саме з'їв
         st.markdown(f"""
             <div class="food-box">
-                <b>🍱 Раціон:</b><br>{latest['Раціон']}
+                <b>📝 Що ти їв сьогодні:</b><br>{latest['Раціон']}
             </div>
         """, unsafe_allow_html=True)
