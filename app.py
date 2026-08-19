@@ -23,10 +23,9 @@ st.markdown(
     .donut-hole {{ width: 125px; height: 125px; background-color: #141414; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white; }}
     .macros-row {{ display: flex; justify-content: space-around; width: 100%; max-width: 340px; margin-top: 12px; font-size: 12px; background-color: rgba(20, 20, 20, 0.9); padding: 8px 6px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); }}
     
-    /* Примусове вирівнювання кнопок в один ряд */
-    div.row-widget.stHorizontal {{ display: flex; flex-direction: row; gap: 10px; }}
-    div.row-widget.stHorizontal > div {{ flex: 1; min-width: 0; }}
-    .stButton button {{ width: 100%; border-radius: 10px; }}
+    /* Стилі для однакових та рівних кнопок в один ряд */
+    .stButton button {{ width: 100%; border-radius: 10px; background-color: #1e1e1e; color: white; border: 1px solid rgba(255, 255, 255, 0.2); }}
+    .stButton button:hover {{ border-color: #36A2EB; background-color: #2b2b2b; color: white; }}
     </style>
     """, unsafe_allow_html=True,
 )
@@ -76,13 +75,13 @@ df_data = load_data()
 
 st.title("🏋️ Мій фітнес")
 
-# Кнопки чітко поруч в один рядок
-col_btn1, col_btn2 = st.columns(2)
-with col_btn1:
+# Рівні колонки без автоматичного перенесення на мобільних
+c_b1, c_b2 = st.columns(2)
+with c_b1:
     if st.button("⚙️ Налаштування", use_container_width=True): 
         st.session_state["edit_mode"] = not st.session_state["edit_mode"]
-with col_btn2:
-    if st.button("↩️ Видалити останнє", use_container_width=True):
+with c_b2:
+    if st.button("↩️ Видалити", use_container_width=True):
         if not df_data.empty:
             df_data = df_data.iloc[:-1]
             df_data.to_excel(EXCEL_FILE, index=False)
