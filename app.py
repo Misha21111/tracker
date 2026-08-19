@@ -6,6 +6,13 @@ import os
 from google import genai
 from google.genai import types
 
+# Імпортуємо компонент для примусового ввімкнення задньої камери
+try:
+    from streamlit_back_camera_input import back_camera_input
+    HAS_BACK_CAMERA = True
+except ImportError:
+    HAS_BACK_CAMERA = False
+
 try:
     from zoneinfo import ZoneInfo
     LOCAL_TZ = ZoneInfo("Europe/Warsaw")
@@ -62,6 +69,7 @@ TRASH_FILE = "fitness_trash.json"
 
 if "show_advice" not in st.session_state: st.session_state["show_advice"] = False
 if "edit_mode" not in st.session_state: st.session_state["edit_mode"] = False
+if "use_camera" not in st.session_state: st.session_state["use_camera"] = False
 
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 if not api_key: 
@@ -109,12 +117,15 @@ st.title("🏋️ Мій фітнес")
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     
-    captured_image = st.file_uploader(
-        "📸 Зробити фото задньою камерою або завантажити:", 
-        type=["jpg", "jpeg", "png"],
-        accept_multiple_files=False,
-        label_visibility="visible"
-    )
+    if st.button("📸 Сканувати камерою", use_container_width=True):
+        st.session_state["use_camera"] = not st.session_state["use_camera"]
+        
+    captured_image = None
+    if st.session_state["use_camera"]:
+        if HAS_BACK_CAMERA:
+            captured_image = back_camera_input()
+        else:
+            captured_image = st.camera_input("Зробити фото")
 
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
@@ -153,6 +164,7 @@ if submit_btn and (user_input or captured_image):
         
         df_data = pd.concat([df_data, new_entry], ignore_index=True)
         df_data.to_excel(EXCEL_FILE, index=False)
+        st.session_state["use_camera"] = False
         st.rerun()
     except Exception as e: st.error(f"Помилка: {e}")
 
