@@ -18,8 +18,8 @@ def get_base64_image(image_path):
     return None
 
 
-# Назва твоєї картинки, яку ти завантажив на GitHub
-IMAGE_FILE = "1000023628.jpg"
+# Точна назва твого файлу з GitHub
+IMAGE_FILE = "Screenshot_20260819_1...jpg"
 img_base64 = get_base64_image(IMAGE_FILE)
 
 bg_style = ""
