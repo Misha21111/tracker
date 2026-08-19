@@ -10,40 +10,19 @@ from google.genai import types
 # --- НАЛАШТУВАННЯ СТИЛЮ ТА ФОНУ ---
 st.set_page_config(page_title="Мій Фітнес", layout="centered")
 
+# Посилання на картинку
+IMAGE_URL = "https://github.com/Misha21111/tracker/raw/main/Screenshot_20260819_175524_Facebook.jpg"
 
-def get_base64_image(image_path):
-    if os.path.exists(image_path):
-        with open(image_path, "rb") as img_file:
-            return base64.b64encode(img_file.read()).decode()
-    return None
-
-
-# Точна назва твого файлу з GitHub
-IMAGE_FILE = "Screenshot_20260819_1...jpg"
-img_base64 = get_base64_image(IMAGE_FILE)
-
-bg_style = ""
-if img_base64:
-    bg_style = f"""
+st.markdown(
+    f"""
+    <style>
     .stApp {{
-        background-image: linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.85)), url("data:image/jpeg;base64,{img_base64}");
+        background-image: linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.85)), url("{IMAGE_URL}");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
     }}
-    """
-else:
-    bg_style = """
-    .stApp {
-        background-color: #0b0b0b;
-    }
-    """
-
-st.markdown(
-    f"""
-    <style>
-    {bg_style}
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
@@ -116,20 +95,15 @@ st.markdown(
 
 EXCEL_FILE = "fitness_entries.xlsx"
 
-# Норми під вагу 89 кг
+# Норми
 TARGET_PROTEIN = 160
 TARGET_FAT = 70
 TARGET_CARBS = 180
 BASE_CALORIE_TARGET = 1990
 
 DAYS_UA = {
-    "Monday": "Понеділок",
-    "Tuesday": "Вівторок",
-    "Wednesday": "Середа",
-    "Thursday": "Четвер",
-    "Friday": "П’ятниця",
-    "Saturday": "Субота",
-    "Sunday": "Неділя",
+    "Monday": "Понеділок", "Tuesday": "Вівторок", "Wednesday": "Середа",
+    "Thursday": "Четвер", "Friday": "П’ятниця", "Saturday": "Субота", "Sunday": "Неділя",
 }
 
 if "redo_stack" not in st.session_state:
@@ -147,9 +121,7 @@ st.title("🏋️ Мій фітнес (89 кг)")
 with st.container(border=True):
     user_input = st.text_input(
         "📥 Введи, що зїв / тренування:",
-        placeholder=(
-            "Наприклад: з'їв 30г хліба, спалено 300 ккал або Калорії 161"
-        ),
+        placeholder="Наприклад: з'їв 30г хліба, спалено 300 ккал або Калорії 161",
     )
     submit_btn = st.button("Записати", type="primary", use_container_width=True)
 
@@ -157,49 +129,25 @@ now = datetime.now()
 date_str = now.strftime("%Y-%m-%d")
 time_str = now.strftime("%H:%M")
 
-
 def load_data():
     if os.path.exists(EXCEL_FILE):
         return pd.read_excel(EXCEL_FILE)
-    return pd.DataFrame(
-        columns=[
-            "Дата",
-            "Час",
-            "Опис",
-            "Тип",
-            "Спожито",
-            "Спалено",
-            "Білки",
-            "Жири",
-            "Вуглеводи",
-        ]
-    )
-
+    return pd.DataFrame(columns=["Дата", "Час", "Опис", "Тип", "Спожито", "Спалено", "Білки", "Жири", "Вуглеводи"])
 
 df_data = load_data()
 
 if submit_btn and user_input:
     prompt = f"""Аналізуй текст: "{user_input}". 
-    Визнач, чи це їжа/калорії які людина спожила, чи це спалені калорії на тренуванні/активності.
-    Якщо в тексті є слова "спалено", "тренування", "калорії" у контексті витрати чи просто цифра тренування — записуй їх у kcal_burned. Якщо це їжа — розрахуй спожиті калорії (total_consumed_kcal) та грами БЖВ (total_protein, total_fat, total_carbs) на основі вказаної ваги продуктів.
-    Поверни JSON із полями: 
-    food_description (опис), 
-    kcal_burned (спалені калорії або 0), 
-    total_consumed_kcal (спожиті калорії або 0), 
-    total_protein (грами білків), 
-    total_fat (грами жирів), 
-    total_carbs (грами вуглеводів)."""
-
+    JSON: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs."""
+    
     try:
         response = client.models.generate_content(
             model="gemini-3.5-flash-lite",
             contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json"
-            ),
+            config=types.GenerateContentConfig(response_mime_type="application/json"),
         )
         data = json.loads(response.text)
-
+        
         c_consumed = float(data.get("total_consumed_kcal") or 0)
         c_burned = float(data.get("kcal_burned") or 0)
         c_protein = float(data.get("total_protein") or 0)
@@ -208,35 +156,18 @@ if submit_btn and user_input:
         c_desc = str(data.get("food_description") or user_input)
 
         entry_type = "Тренування" if c_burned > 0 else "Їжа"
-        if c_burned > 0 and c_consumed == 0:
-            c_desc = f"Тренування ({c_burned} ккал)"
-
-        new_entry = pd.DataFrame(
-            [
-                {
-                    "Дата": date_str,
-                    "Час": time_str,
-                    "Опис": c_desc,
-                    "Тип": entry_type,
-                    "Спожито": c_consumed,
-                    "Спалено": c_burned,
-                    "Білки": c_protein,
-                    "Жири": c_fat,
-                    "Вуглеводи": c_carbs,
-                }
-            ]
-        )
-
+        new_entry = pd.DataFrame([{"Дата": date_str, "Час": time_str, "Опис": c_desc, "Тип": entry_type, 
+                                   "Спожито": c_consumed, "Спалено": c_burned, "Білки": c_protein, 
+                                   "Жири": c_fat, "Вуглеводи": c_carbs}])
+        
         df_data = pd.concat([df_data, new_entry], ignore_index=True)
         df_data.to_excel(EXCEL_FILE, index=False)
-        st.session_state["redo_stack"] = []
         st.success("✅ Записано!")
         st.rerun()
     except Exception as e:
-        st.error(f"Помилка запиту до API: {e}")
+        st.error(f"Помилка: {e}")
 
 today_df = df_data[df_data["Дата"].astype(str) == date_str]
-
 consumed = today_df["Спожито"].sum()
 burned = today_df["Спалено"].sum()
 protein = today_df["Білки"].sum()
@@ -245,12 +176,10 @@ carbs = today_df["Вуглеводи"].sum()
 
 if not today_df.empty:
     st.markdown(f"**📅 {date_str} ({DAYS_UA.get(now.strftime('%A'))})**")
-
-    p_kcal = protein * 4
-    f_kcal = fat * 9
-    c_kcal = carbs * 4
+    
+    p_kcal, f_kcal, c_kcal = protein * 4, fat * 9, carbs * 4
     total_macro_kcal = p_kcal + f_kcal + c_kcal
-
+    
     if total_macro_kcal > 0:
         p_pct = round((p_kcal / total_macro_kcal) * 100)
         f_pct = round((f_kcal / total_macro_kcal) * 100)
@@ -261,15 +190,14 @@ if not today_df.empty:
         gradient_style = "background: #333;"
 
     percent_target = min(100, int((consumed / BASE_CALORIE_TARGET) * 100))
-
-    st.markdown(
-        f"""
+    
+    st.markdown(f"""
         <div class="donut-container">
             <div class="donut-ring" style="{gradient_style}">
                 <div class="donut-hole">
                     <span style="font-size: 20px; font-weight: bold;">{int(consumed)}</span>
                     <span style="font-size: 11px; color: #aaa;">із {BASE_CALORIE_TARGET} ккал</span>
-                    <span style="font-size: 12px; color: #4CAF50; margin-top: 2px;"><b>{percent_target}% від норми</b></span>
+                    <span style="font-size: 12px; color: #4CAF50;"><b>{percent_target}%</b></span>
                 </div>
             </div>
             <div class="macros-row">
@@ -278,70 +206,21 @@ if not today_df.empty:
                 <span style="color:#FF6384;">🍞 Вугл: <b>{carbs:.0f}/{TARGET_CARBS}г</b></span>
             </div>
         </div>
-    """,
-        unsafe_allow_html=True,
-    )
+    """, unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
-    c1.metric("🍽️ З'їв за день", f"{int(consumed)} ккал")
+    c1.metric("🍽️ З'їв", f"{int(consumed)} ккал")
     c2.metric("💪 Спалено", f"{int(burned)} ккал")
 
     log_lines = []
     for _, row in today_df.iterrows():
         icon = "💪" if row["Тип"] == "Тренування" else "🍽️"
-        kcal_val = (
-            row["Спалено"] if row["Тип"] == "Тренування" else row["Спожито"]
-        )
-        log_lines.append(
-            f"• {row['Час']} {icon} {row['Опис']} — <b>{int(kcal_val)} ккал</b>"
-        )
-
-    st.markdown(
-        f"""
-        <div class="food-box">
-            <b>📝 Лог за сьогодні:</b><br>
-            {"<br>".join(log_lines)}
-        </div>
-    """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("---")
-
-    col_undo, col_redo, col_clear = st.columns(3)
-
-    with col_undo:
-        if st.button("↩️ Назад", type="secondary", use_container_width=True):
-            if not df_data.empty:
-                last_entry = df_data.iloc[-1:]
-                st.session_state["redo_stack"].append(last_entry)
-                if len(st.session_state["redo_stack"]) > 10:
-                    st.session_state["redo_stack"].pop(0)
-
-                df_data = df_data.iloc[:-1]
-                df_data.to_excel(EXCEL_FILE, index=False)
-                st.success("Скасовано!")
-                st.rerun()
-
-    with col_redo:
-        has_redo = len(st.session_state["redo_stack"]) > 0
-        if st.button(
-            "↪️ Вперед",
-            type="secondary",
-            use_container_width=True,
-            disabled=not has_redo,
-        ):
-            if has_redo:
-                restored_entry = st.session_state["redo_stack"].pop()
-                df_data = pd.concat([df_data, restored_entry], ignore_index=True)
-                df_data.to_excel(EXCEL_FILE, index=False)
-                st.success("Повернуто!")
-                st.rerun()
-
-    with col_clear:
-        if st.button("⚠️ Очистити", type="primary", use_container_width=True):
-            df_data = df_data[df_data["Дата"].astype(str) != date_str]
-            df_data.to_excel(EXCEL_FILE, index=False)
-            st.session_state["redo_stack"] = []
-            st.success("День очищено!")
-            st.rerun()
+        kcal_val = row["Спалено"] if row["Тип"] == "Тренування" else row["Спожито"]
+        log_lines.append(f"• {row['Час']} {icon} {row['Опис']} — <b>{int(kcal_val)} ккал</b>")
+    
+    st.markdown(f"""<div class="food-box"><b>📝 Лог:</b><br>{"<br>".join(log_lines)}</div>""", unsafe_allow_html=True)
+    
+    if st.button("⚠️ Очистити сьогодні", type="primary", use_container_width=True):
+        df_data = df_data[df_data["Дата"].astype(str) != date_str]
+        df_data.to_excel(EXCEL_FILE, index=False)
+        st.rerun()
