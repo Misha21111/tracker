@@ -108,14 +108,7 @@ st.title("🏋️ Мій фітнес")
 
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
-    
-    captured_image = st.file_uploader(
-        "📸 Зробити фото задньою камерою або завантажити:", 
-        type=["jpg", "jpeg", "png"],
-        accept_multiple_files=False,
-        label_visibility="visible"
-    )
-
+    captured_image = st.camera_input("📸 Зробити фото камерою")
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
 if submit_btn and (user_input or captured_image):
@@ -218,12 +211,11 @@ if not day_df.empty:
     else:
         total_burned = explicit_burned + bmr_total
 
-    # Розрахунок дефіциту (Спалено - З'їдено)
-    deficit = total_burned - consumed
+    target_cal = user_settings["calories"]
+    deficit = target_cal - consumed
 
     st.markdown(f"**📅 {selected_date} | Вага: ~{w_data.get('current_weight', 89.0):.1f} кг**")
     
-    target_cal = user_settings["calories"]
     percent_target = min(100, int((consumed / target_cal) * 100)) if target_cal > 0 else 0
     
     total_macros = protein + fat + carbs
@@ -238,7 +230,9 @@ if not day_df.empty:
         <div class="donut-container">
             <div class="donut-ring" style="background: conic-gradient(#36A2EB 0deg {p_deg}deg, #FFCE56 {p_deg}deg {f_deg}deg, #FF6384 {f_deg}deg {c_deg}deg);">
                 <div class="donut-hole">
-                    <b>{int(consumed)}</b><br>із {target_cal} ккал<br><b>{percent_target}%</b>
+                    <b style="font-size: 15px;">{int(consumed)}</b>
+                    <span style="font-size: 11px; color: #aaa;">із {target_cal} ккал</span>
+                    <span style="font-size: 11px; color: #36A2EB; margin-top: 2px;">Дефіцит: {int(deficit)}</span>
                 </div>
             </div>
             <div class="macros-row">
@@ -252,7 +246,7 @@ if not day_df.empty:
     c1, c2, c3 = st.columns(3)
     c1.metric("🍽️ З'їв", f"{int(consumed)} ккал")
     c2.metric("🔥 Спалено", f"{int(total_burned)} ккал")
-    c3.metric("📉 Дефіцит", f"{int(deficit)} ккал", delta=f"{int(deficit)} ккал" if deficit >= 0 else f"{int(deficit)} ккал", delta_color="normal" if deficit >= 0 else "inverse")
+    c3.metric("📉 Дефіцит", f"{int(deficit)} ккал")
     
     log_html_lines = []
     for _, row in day_df.iterrows():
