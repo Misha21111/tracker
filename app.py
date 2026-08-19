@@ -6,7 +6,6 @@ import os
 from google import genai
 from google.genai import types
 
-# Примусове встановлення локального часу (Варшава)
 try:
     from zoneinfo import ZoneInfo
     LOCAL_TZ = ZoneInfo("Europe/Warsaw")
@@ -31,18 +30,39 @@ st.markdown(
     .macros-row {{ display: flex; justify-content: space-around; width: 100%; max-width: 340px; margin-top: 12px; font-size: 12px; background-color: rgba(20, 20, 20, 0.9); padding: 8px 6px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); }}
     .stButton button {{ width: 100%; border-radius: 10px; }}
     
-    /* ЖОРСТКА БЛОКУВАННЯ ПЕРЕНОСУ КОЛОНОК НА МОБІЛЬНИХ */
+    /* ВИПРАВЛЕННЯ ДЛЯ КНОПОК НА МОБІЛЬНИХ */
     @media (max-width: 768px) {{
         div[data-testid="stHorizontalBlock"] {{
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            gap: 10px !important;
+            gap: 6px !important;
         }}
         div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {{
             width: 50% !important;
             flex: 1 1 50% !important;
             min-width: 0 !important;
+            padding: 0 !important;
         }}
+    }}
+
+    .log-item {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 6px 0;
+        font-size: 14px;
+    }}
+    .log-item:last-child {{ border-bottom: none; }}
+    .log-left {{
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-right: 10px;
+        flex-grow: 1;
+    }}
+    .log-right {{
+        white-space: nowrap;
+        font-weight: bold;
+        color: #36A2EB;
     }}
     </style>
     """, unsafe_allow_html=True,
@@ -88,6 +108,8 @@ def load_data():
         df = pd.read_excel(EXCEL_FILE)
         if "Час" not in df.columns:
             df["Час"] = datetime.now(LOCAL_TZ).strftime("%H:%M")
+        else:
+            df["Час"] = df["Час"].fillna(datetime.now(LOCAL_TZ).strftime("%H:%M"))
         return df
     return pd.DataFrame(columns=["Дата", "Час", "Опис", "Тип", "Спожито", "Спалено", "Білки", "Жири", "Вуглеводи"])
 
@@ -97,13 +119,11 @@ df_data = load_data()
 
 st.title("🏋️ Мій фітнес")
 
-# 1. Поле введення їжі
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
 if submit_btn and user_input:
-    # Записуємо точний локальний час у момент кліку
     current_time_str = datetime.now(LOCAL_TZ).strftime("%H:%M")
     current_date_str = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
     
@@ -134,7 +154,6 @@ if submit_btn and user_input:
         st.rerun()
     except Exception as e: st.error(f"Помилка: {e}")
 
-# 2. Вибір дня для перегляду
 today_str = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
 available_dates = [today_str]
 if not df_data.empty and "Дата" in df_data.columns:
@@ -145,11 +164,9 @@ if not df_data.empty and "Дата" in df_data.columns:
 
 selected_date = st.selectbox("📅 Вибрати день для перегляду:", available_dates)
 
-# 3. Кнопка Налаштування
 if st.button("⚙️ Налаштування", use_container_width=True): 
     st.session_state["edit_mode"] = not st.session_state["edit_mode"]
 
-# 4. Кнопки «Видалити» та «Повернути»
 col1, col2 = st.columns(2)
 with col1:
     btn_del = st.button("🗑️ Видалити", use_container_width=True)
@@ -234,8 +251,15 @@ if not day_df.empty:
     c1.metric("🍽️ З'їв", f"{int(consumed)} ккал")
     c2.metric("🔥 Спалено", f"{int(total_burned)} ккал")
     
-    log_lines = [f"• {str(row['Час'])[:5]} {'💪' if row['Тип'] == 'Тренування' else '🍽️'} {row['Опис']} — <b>{int(row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито'])} ккал</b>" for _, row in day_df.iterrows()]
-    st.markdown(f'<div class="food-box"><b>📝 Лог:</b><br>{"<br>".join(log_lines)}</div>', unsafe_allow_html=True)
+    log_html_lines = []
+    for _, row in day_df.iterrows():
+        t_val = str(row['Час'])[:5]
+        icon = '💪' if row['Тип'] == 'Тренування' else '🍽️'
+        desc = row['Опис']
+        kcal = int(row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито'])
+        log_html_lines.append(f'<div class="log-item"><div class="log-left">{t_val} {icon} {desc}</div><div class="log-right"><b>{kcal} ккал</b></div></div>')
+
+    st.markdown(f'<div class="food-box"><b>📝 Лог:</b><br>{"".join(log_html_lines)}</div>', unsafe_allow_html=True)
     
     if st.button("💡 Порада Gemini", use_container_width=True):
         st.session_state["show_advice"] = True
