@@ -1,35 +1,67 @@
+import base64
+from datetime import datetime
 import json
 import os
 import pandas as pd
 import streamlit as st
-from datetime import datetime
 from google import genai
 from google.genai import types
 
-# --- НАЛАШТУВАННЯ СТИЛЮ ---
-st.set_page_config(page_title='Мій Фітнес', layout='centered')
+# --- НАЛАШТУВАННЯ СТИЛЮ ТА ФОНУ ---
+st.set_page_config(page_title="Мій Фітнес", layout="centered")
 
-st.markdown("""
-    <style>
+
+# Функція для конвертації твоєї картинки в фон без розтягування
+def get_base64_image(image_path):
+    if os.path.exists(image_path):
+        with open(image_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    return None
+
+
+# Шлях до твоєї картинки (поклади її в одну папки з цим скриптом і назви так само)
+IMAGE_FILE = "1000023628.jpg"
+img_base64 = get_base64_image(IMAGE_FILE)
+
+bg_style = ""
+if img_base64:
+    bg_style = f"""
+    .stApp {{
+        background-image: linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.85)), url("data:image/jpeg;base64,{img_base64}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+    """
+else:
+    bg_style = """
     .stApp {
         background-color: #0b0b0b;
     }
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    """
+
+st.markdown(
+    f"""
+    <style>
+    {bg_style}
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
     
-    div[data-testid="stMetric"], div[data-testid="stMarkdownContainer"], div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: rgba(20, 20, 20, 0.95);
+    div[data-testid="stMetric"], div[data-testid="stMarkdownContainer"], div[data-testid="stVerticalBlockBorderWrapper"] {{
+        background-color: rgba(20, 20, 20, 0.85);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 12px;
         padding: 10px 14px;
         color: white;
-    }
-    .block-container {
+    }}
+    .block-container {{
         padding-top: 1rem;
         padding-bottom: 1rem;
-    }
-    .food-box {
-        background-color: rgba(20, 20, 20, 0.95);
+    }}
+    .food-box {{
+        background-color: rgba(20, 20, 20, 0.85);
         border: 1px solid rgba(255, 255, 255, 0.1);
         border-radius: 12px;
         padding: 12px 16px;
@@ -37,15 +69,15 @@ st.markdown("""
         font-size: 16px;
         line-height: 1.5;
         margin-top: 10px;
-    }
-    .donut-container {
+    }}
+    .donut-container {{
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         margin: 15px 0;
-    }
-    .donut-ring {
+    }}
+    .donut-ring {{
         width: 190px;
         height: 190px;
         border-radius: 50%;
@@ -53,8 +85,8 @@ st.markdown("""
         justify-content: center;
         align-items: center;
         box-shadow: 0 0 15px rgba(0,0,0,0.8);
-    }
-    .donut-hole {
+    }}
+    .donut-hole {{
         width: 125px;
         height: 125px;
         background-color: #141414;
@@ -65,35 +97,48 @@ st.markdown("""
         align-items: center;
         text-align: center;
         color: white;
-    }
-    .macros-row {
+    }}
+    .macros-row {{
         display: flex;
         justify-content: space-around;
         width: 100%;
         max-width: 340px;
         margin-top: 12px;
         font-size: 12px;
-        background-color: rgba(20, 20, 20, 0.95);
+        background-color: rgba(20, 20, 20, 0.9);
         padding: 8px 6px;
         border-radius: 10px;
-    }
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }}
     </style>
-    """, unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True,
+)
 
-EXCEL_FILE = 'fitness_entries.xlsx'
+EXCEL_FILE = "fitness_entries.xlsx"
 
-# Оновлені норми під вагу 89 кг
+# Норми під вагу 89 кг
 TARGET_PROTEIN = 160
 TARGET_FAT = 70
 TARGET_CARBS = 180
-# Розрахункова калорійність: (160*4) + (70*9) + (180*4) = 640 + 630 + 720 = 1990
 BASE_CALORIE_TARGET = 1990
 
-DAYS_UA = {'Monday': 'Понеділок', 'Tuesday': 'Вівторок', 'Wednesday': 'Середа', 'Thursday': 'Четвер', 'Friday': 'П’ятниця', 'Saturday': 'Субота', 'Sunday': 'Неділя'}
+DAYS_UA = {
+    "Monday": "Понеділок",
+    "Tuesday": "Вівторок",
+    "Wednesday": "Середа",
+    "Thursday": "Четвер",
+    "Friday": "П’ятниця",
+    "Saturday": "Субота",
+    "Sunday": "Неділя",
+}
 
-api_key = st.secrets.get('GEMINI_API_KEY') or os.environ.get('GEMINI_API_KEY')
+if "redo_stack" not in st.session_state:
+    st.session_state["redo_stack"] = []
+
+api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 if not api_key:
-    st.error('⚠️ Не знайдено API ключ!')
+    st.error("⚠️ Не знайдено API ключ!")
     st.stop()
 
 client = genai.Client(api_key=api_key)
@@ -101,17 +146,36 @@ client = genai.Client(api_key=api_key)
 st.title("🏋️ Мій фітнес (89 кг)")
 
 with st.container(border=True):
-    user_input = st.text_input('📥 Введи, що зїв / тренування:', placeholder="Наприклад: з'їв 30г хліба, спалено 300 ккал або Калорії 161")
-    submit_btn = st.button('Записати', type='primary', use_container_width=True)
+    user_input = st.text_input(
+        "📥 Введи, що зїв / тренування:",
+        placeholder=(
+            "Наприклад: з'їв 30г хліба, спалено 300 ккал або Калорії 161"
+        ),
+    )
+    submit_btn = st.button("Записати", type="primary", use_container_width=True)
 
 now = datetime.now()
-date_str = now.strftime('%Y-%m-%d')
-time_str = now.strftime('%H:%M')
+date_str = now.strftime("%Y-%m-%d")
+time_str = now.strftime("%H:%M")
+
 
 def load_data():
     if os.path.exists(EXCEL_FILE):
         return pd.read_excel(EXCEL_FILE)
-    return pd.DataFrame(columns=['Дата', 'Час', 'Опис', 'Тип', 'Спожито', 'Спалено', 'Білки', 'Жири', 'Вуглеводи'])
+    return pd.DataFrame(
+        columns=[
+            "Дата",
+            "Час",
+            "Опис",
+            "Тип",
+            "Спожито",
+            "Спалено",
+            "Білки",
+            "Жири",
+            "Вуглеводи",
+        ]
+    )
+
 
 df_data = load_data()
 
@@ -126,52 +190,59 @@ if submit_btn and user_input:
     total_protein (грами білків), 
     total_fat (грами жирів), 
     total_carbs (грами вуглеводів)."""
-    
+
     try:
         response = client.models.generate_content(
-            model='gemini-3.5-flash-lite', 
-            contents=prompt, 
-            config=types.GenerateContentConfig(response_mime_type='application/json')
+            model="gemini-3.5-flash-lite",
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            ),
         )
         data = json.loads(response.text)
-        
-        c_consumed = float(data.get('total_consumed_kcal') or 0)
-        c_burned = float(data.get('kcal_burned') or 0)
-        c_protein = float(data.get('total_protein') or 0)
-        c_fat = float(data.get('total_fat') or 0)
-        c_carbs = float(data.get('total_carbs') or 0)
-        c_desc = str(data.get('food_description') or user_input)
 
-        entry_type = 'Тренування' if c_burned > 0 else 'Їжа'
+        c_consumed = float(data.get("total_consumed_kcal") or 0)
+        c_burned = float(data.get("kcal_burned") or 0)
+        c_protein = float(data.get("total_protein") or 0)
+        c_fat = float(data.get("total_fat") or 0)
+        c_carbs = float(data.get("total_carbs") or 0)
+        c_desc = str(data.get("food_description") or user_input)
+
+        entry_type = "Тренування" if c_burned > 0 else "Їжа"
         if c_burned > 0 and c_consumed == 0:
             c_desc = f"Тренування ({c_burned} ккал)"
 
-        new_entry = pd.DataFrame([{
-            'Дата': date_str,
-            'Час': time_str,
-            'Опис': c_desc,
-            'Тип': entry_type,
-            'Спожито': c_consumed,
-            'Спалено': c_burned,
-            'Білки': c_protein,
-            'Жири': c_fat,
-            'Вуглеводи': c_carbs
-        }])
+        new_entry = pd.DataFrame(
+            [
+                {
+                    "Дата": date_str,
+                    "Час": time_str,
+                    "Опис": c_desc,
+                    "Тип": entry_type,
+                    "Спожито": c_consumed,
+                    "Спалено": c_burned,
+                    "Білки": c_protein,
+                    "Жири": c_fat,
+                    "Вуглеводи": c_carbs,
+                }
+            ]
+        )
 
         df_data = pd.concat([df_data, new_entry], ignore_index=True)
         df_data.to_excel(EXCEL_FILE, index=False)
-        st.success('✅ Записано!')
+        st.session_state["redo_stack"] = []
+        st.success("✅ Записано!")
         st.rerun()
     except Exception as e:
-        st.error(f'Помилка запиту до API: {e}')
+        st.error(f"Помилка запиту до API: {e}")
 
-today_df = df_data[df_data['Дата'].astype(str) == date_str]
+today_df = df_data[df_data["Дата"].astype(str) == date_str]
 
-consumed = today_df['Спожито'].sum()
-burned = today_df['Спалено'].sum()
-protein = today_df['Білки'].sum()
-fat = today_df['Жири'].sum()
-carbs = today_df['Вуглеводи'].sum()
+consumed = today_df["Спожито"].sum()
+burned = today_df["Спалено"].sum()
+protein = today_df["Білки"].sum()
+fat = today_df["Жири"].sum()
+carbs = today_df["Вуглеводи"].sum()
 
 if not today_df.empty:
     st.markdown(f"**📅 {date_str} ({DAYS_UA.get(now.strftime('%A'))})**")
@@ -192,7 +263,8 @@ if not today_df.empty:
 
     percent_target = min(100, int((consumed / BASE_CALORIE_TARGET) * 100))
 
-    st.markdown(f"""
+    st.markdown(
+        f"""
         <div class="donut-container">
             <div class="donut-ring" style="{gradient_style}">
                 <div class="donut-hole">
@@ -207,7 +279,9 @@ if not today_df.empty:
                 <span style="color:#FF6384;">🍞 Вугл: <b>{carbs:.0f}/{TARGET_CARBS}г</b></span>
             </div>
         </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     c1, c2 = st.columns(2)
     c1.metric("🍽️ З'їв за день", f"{int(consumed)} ккал")
@@ -215,31 +289,60 @@ if not today_df.empty:
 
     log_lines = []
     for _, row in today_df.iterrows():
-        icon = "💪" if row['Тип'] == 'Тренування' else "🍽️"
-        kcal_val = row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито']
-        log_lines.append(f"• {row['Час']} {icon} {row['Опис']} — <b>{int(kcal_val)} ккал</b>")
+        icon = "💪" if row["Тип"] == "Тренування" else "🍽️"
+        kcal_val = (
+            row["Спалено"] if row["Тип"] == "Тренування" else row["Спожито"]
+        )
+        log_lines.append(
+            f"• {row['Час']} {icon} {row['Опис']} — <b>{int(kcal_val)} ккал</b>"
+        )
 
-    st.markdown(f"""
+    st.markdown(
+        f"""
         <div class="food-box">
             <b>📝 Лог за сьогодні:</b><br>
             {"<br>".join(log_lines)}
         </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     st.markdown("---")
-    
-    col_undo, col_clear = st.columns(2)
+
+    col_undo, col_redo, col_clear = st.columns(3)
+
     with col_undo:
-        if st.button("↩️ Скасувати останню", type='secondary', use_container_width=True):
+        if st.button("↩️ Назад", type="secondary", use_container_width=True):
             if not df_data.empty:
+                last_entry = df_data.iloc[-1:]
+                st.session_state["redo_stack"].append(last_entry)
+                if len(st.session_state["redo_stack"]) > 10:
+                    st.session_state["redo_stack"].pop(0)
+
                 df_data = df_data.iloc[:-1]
                 df_data.to_excel(EXCEL_FILE, index=False)
-                st.success("Останню дію скасовано!")
+                st.success("Скасовано!")
+                st.rerun()
+
+    with col_redo:
+        has_redo = len(st.session_state["redo_stack"]) > 0
+        if st.button(
+            "↪️ Вперед",
+            type="secondary",
+            use_container_width=True,
+            disabled=not has_redo,
+        ):
+            if has_redo:
+                restored_entry = st.session_state["redo_stack"].pop()
+                df_data = pd.concat([df_data, restored_entry], ignore_index=True)
+                df_data.to_excel(EXCEL_FILE, index=False)
+                st.success("Повернуто!")
                 st.rerun()
 
     with col_clear:
-        if st.button("⚠️ Очистити день", type='primary', use_container_width=True):
-            df_data = df_data[df_data['Дата'].astype(str) != date_str]
+        if st.button("⚠️ Очистити", type="primary", use_container_width=True):
+            df_data = df_data[df_data["Дата"].astype(str) != date_str]
             df_data.to_excel(EXCEL_FILE, index=False)
+            st.session_state["redo_stack"] = []
             st.success("День очищено!")
             st.rerun()
