@@ -63,7 +63,7 @@ with st.container(border=True):
         placeholder="Наприклад: кроки 5000, яйця 100",
         label_visibility="collapsed"
     )
-    submit_btn = st.button("Записати", type="primary")
+    submit_btn = st.button("Записати", type="primary", use_container_width=True)
 
 if submit_btn and user_input:
     parts = [p.strip() for p in user_input.split(',')]
@@ -119,7 +119,6 @@ if submit_btn and user_input:
 
     if date_str in df['Дата'].astype(str).values:
         idx = df[df['Дата'].astype(str) == date_str].index[0]
-        # Замінюємо кроки тільки якщо вони вказані в новому записі
         if steps_mentioned:
             df.loc[idx, 'Кроки'] = input_steps
         
@@ -148,6 +147,18 @@ if submit_btn and user_input:
     st.success("✅ Дані оновлено!")
 
 if os.path.exists(EXCEL_FILE):
+    df_current = pd.read_excel(EXCEL_FILE)
+    
     st.divider()
     st.subheader("📅 Таблиця обліку")
-    st.dataframe(pd.read_excel(EXCEL_FILE), use_container_width=True)
+    st.dataframe(df_current, use_container_width=True)
+
+    if not df_current.empty:
+        with st.expander("🗑️ Видалити конкретний день"):
+            dates_list = df_current['Дата'].astype(str).tolist()
+            selected_date = st.selectbox("Оберіть дату для видалення:", dates_list)
+            if st.button("Видалити обраний день", type="secondary"):
+                df_updated = df_current[df_current['Дата'].astype(str) != selected_date]
+                df_updated.to_excel(EXCEL_FILE, index=False)
+                st.success(f"🗑️ Запис за {selected_date} видалено!")
+                st.rerun()
