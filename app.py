@@ -22,6 +22,10 @@ st.markdown(
     .donut-ring {{ width: 190px; height: 190px; border-radius: 50%; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 15px rgba(0,0,0,0.8); }}
     .donut-hole {{ width: 125px; height: 125px; background-color: #141414; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white; }}
     .macros-row {{ display: flex; justify-content: space-around; width: 100%; max-width: 340px; margin-top: 12px; font-size: 12px; background-color: rgba(20, 20, 20, 0.9); padding: 8px 6px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); }}
+    
+    /* Примусове вирівнювання кнопок в один ряд */
+    div.row-widget.stHorizontal {{ display: flex; flex-direction: row; gap: 10px; }}
+    div.row-widget.stHorizontal > div {{ flex: 1; min-width: 0; }}
     .stButton button {{ width: 100%; border-radius: 10px; }}
     </style>
     """, unsafe_allow_html=True,
@@ -72,7 +76,7 @@ df_data = load_data()
 
 st.title("🏋️ Мій фітнес")
 
-# Кнопки управління чітко поруч в один рядок
+# Кнопки чітко поруч в один рядок
 col_btn1, col_btn2 = st.columns(2)
 with col_btn1:
     if st.button("⚙️ Налаштування", use_container_width=True): 
