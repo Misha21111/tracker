@@ -1,8 +1,9 @@
-import streamlit as st
+   import streamlit as st
 import pandas as pd
-import requests
-import re
+import json
 import os
+from google import genai
+from google.genai import types
 
 EXCEL_FILE = 'fitness_tracker.xlsx'
 
@@ -11,30 +12,131 @@ DAYS_UA = {
     'Thursday': 'Четвер', 'Friday': 'П’ятниця', 'Saturday': 'Субота', 'Sunday': 'Неділя'
 }
 
-RECIPES = {
-    'плов': [('рис варений', 0.50), ('куряче філе', 0.35), ('овочі', 0.15)],
-    'йогурт з чіа і ківі': [('йогурт грецький', 0.70), ('насіння чіа', 0.10), ('ківі', 0.20)],
-    'йогурт з чіа': [('йогурт грецький', 0.80), ('насіння чіа', 0.20)]
-}
+st.set_page_config(page_title="Облік фітнесу з ШІ", layout="wide")
+st.title("🏋️ Облік фітнесу з ШІ")
 
-def get_product_from_api(query):
-    url = f"https://world.openfoodfacts.org/cgi/search.pl?search_terms={query}&search_simple=1&action=process&json=1&lc=uk"
+# Отримання API ключа зі Streamlit Secrets або змінних середовища
+api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
+
+if not api_key:
+    st.error("⚠️ Не знайдено GEMINI_API_KEY у Secrets Streamlit! Додайте ключ у налаштуваннях додатка (Manage app -> Settings -> Secrets).")
+    st.stop()
+
+client = genai.Client(api_key=api_key)
+
+with st.container(border=True):
+    st.markdown("### 📥 Введіть дані у довільній формі")
+    user_input = st.text_input(
+        "Рядок введення:", 
+        placeholder="Наприклад: з'їв 30г чорного хліба з 10г індичої ковбаси, пройшов 8500 кроків, спалено 450 ккал",
+        label_visibility="collapsed"
+    )
+    submit_btn = st.button("Записати", type="primary", use_container_width=True)
+
+if submit_btn and user_input:
+    prompt = f"""
+    Проаналізуй наступний текст українською мовою та вилучи дані про фізичну активність і спожиту їжу:
+    "{user_input}"
+
+    Поверни відповідь СУВОРO у форматі JSON із такими полями:
+    {{
+        "steps": <ціле число кроків, якщо вказано, інакше null>,
+        "kcal_burned": <число спалених ккал/калорій за активність, якщо вказано, інакше null>,
+        "total_consumed_kcal": <загальна калорійність всієї спожитої їжі (ккал)>,
+        "total_protein": <загальна кількість білків у грамах>,
+        "total_fat": <загальна кількість жирів у грамах>,
+        "total_carbs": <загальна кількість вуглеводів у грамах>
+    }}
+
+    Правила розрахунку:
+    - Враховуй точну калорійність і БЖВ для конкретного типу продукту (наприклад, чорний/білий хліб, індича/свиняча ковбаса, куряче/свиняче м'ясо).
+    - Якщо вагу вказано приблизно ("шматочок", "порція"), зроби максимально реалістичну оцінку ваги та БЖВ.
+    - Якщо їжа не згадується, поверни 0 для всіх показників харчування.
+    - Відповідь має бути ЛИШЕ чистим JSON-об'єктом без markdown чи додаткового тексту.
+    """
+
     try:
-        response = requests.get(url, timeout=4)
-        if response.status_code == 200:
-            data = response.json()
-            for p in data.get('products', []):
-                nutri = p.get('nutriments', {})
-                kcal = nutri.get('energy-kcal_100g')
-                if kcal is not None:
-                    return {
-                        'kcal': float(kcal),
-                        'protein': float(nutri.get('proteins_100g', 0)),
-                        'fat': float(nutri.get('fat_100g', 0)),
-                        'carbs': float(nutri.get('carbohydrates_100g', 0))
-                    }
-    except Exception:
-        pass
+        with st.spinner("Штучний інтелект аналізує запис..."):
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json"
+                )
+            )
+            
+            data = json.loads(response.text)
+
+            input_steps = data.get("steps")
+            input_kcal_burned = data.get("kcal_burned")
+            add_kcal = float(data.get("total_consumed_kcal", 0.0))
+            add_p = float(data.get("total_protein", 0.0))
+            add_f = float(data.get("total_fat", 0.0))
+            add_c = float(data.get("total_carbs", 0.0))
+
+        now = pd.Timestamp.today()
+        date_str = now.strftime('%Y-%m-%d')
+        day_name_ua = DAYS_UA.get(now.strftime('%A'), '')
+
+        if os.path.exists(EXCEL_FILE):
+            df = pd.read_excel(EXCEL_FILE)
+        else:
+            df = pd.DataFrame(columns=[
+                'Дата', 'День тижня', 'Кроки', 'Спалено (ккал)', 
+                'Спожито (ккал)', 'Білки (г)', 'Жири (г)', 'Вуглеводи (г)', 'Баланс (ккал)'
+            ])
+
+        if date_str in df['Дата'].astype(str).values:
+            idx = df[df['Дата'].astype(str) == date_str].index[0]
+            
+            if input_steps is not None:
+                df.loc[idx, 'Кроки'] = int(input_steps)
+            if input_kcal_burned is not None:
+                df.loc[idx, 'Спалено (ккал)'] = float(input_kcal_burned)
+            
+            df.loc[idx, 'Спожито (ккал)'] = round(df.loc[idx, 'Спожито (ккал)'] + add_kcal, 1)
+            df.loc[idx, 'Білки (г)'] = round(df.loc[idx, 'Білки (г)'] + add_p, 1)
+            df.loc[idx, 'Жири (г)'] = round(df.loc[idx, 'Жири (г)'] + add_f, 1)
+            df.loc[idx, 'Вуглеводи (г)'] = round(df.loc[idx, 'Вуглеводи (г)'] + add_c, 1)
+            df.loc[idx, 'Баланс (ккал)'] = round(df.loc[idx, 'Спожито (ккал)'] - df.loc[idx, 'Спалено (ккал)'], 1)
+        else:
+            new_row = pd.DataFrame({
+                'Дата': [date_str],
+                'День тижня': [day_name_ua],
+                'Кроки': [input_steps if input_steps is not None else 0],
+                'Спалено (ккал)': [input_kcal_burned if input_kcal_burned is not None else 0.0],
+                'Спожито (ккал)': [round(add_kcal, 1)],
+                'Білки (г)': [round(add_p, 1)],
+                'Жири (г)': [round(add_f, 1)],
+                'Вуглеводи (г)': [round(add_c, 1)],
+                'Баланс (ккал)': [round(add_kcal - (input_kcal_burned if input_kcal_burned is not None else 0.0), 1)]
+            })
+            df = pd.concat([df, new_row], ignore_index=True)
+
+        df = df.sort_values(by='Дата', ascending=False)
+        df.to_excel(EXCEL_FILE, index=False)
+        st.success("✅ Дані успішно розпізнано та додано!")
+
+    except Exception as e:
+        st.error(f"Помилка обробки: {e}")
+
+if os.path.exists(EXCEL_FILE):
+    df_current = pd.read_excel(EXCEL_FILE)
+    
+    st.divider()
+    st.subheader("📅 Таблиця обліку")
+    st.dataframe(df_current, use_container_width=True)
+
+    if not df_current.empty:
+        with st.expander("🗑️ Видалити конкретний день"):
+            dates_list = df_current['Дата'].astype(str).tolist()
+            selected_date = st.selectbox("Оберіть дату для видалення:", dates_list)
+            if st.button("Видалити обраний день", type="secondary"):
+                df_updated = df_current[df_current['Дата'].astype(str) != selected_date]
+                df_updated.to_excel(EXCEL_FILE, index=False)
+                st.success(f"🗑️ Запис за {selected_date} видалено!")
+                st.rerun()
+     pass
     return None
 
 def process_food_item(name, grams):
