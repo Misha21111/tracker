@@ -6,6 +6,13 @@ import os
 from google import genai
 from google.genai import types
 
+# Спробуємо імпортувати компонент для задньої камери
+try:
+    from streamlit_back_camera_input import back_camera_input
+    HAS_BACK_CAMERA = True
+except ImportError:
+    HAS_BACK_CAMERA = False
+
 try:
     from zoneinfo import ZoneInfo
     LOCAL_TZ = ZoneInfo("Europe/Warsaw")
@@ -62,6 +69,7 @@ TRASH_FILE = "fitness_trash.json"
 
 if "show_advice" not in st.session_state: st.session_state["show_advice"] = False
 if "edit_mode" not in st.session_state: st.session_state["edit_mode"] = False
+if "use_camera" not in st.session_state: st.session_state["use_camera"] = False
 
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 if not api_key: 
@@ -108,18 +116,39 @@ st.title("🏋️ Мій фітнес")
 
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
+    
+    # Кнопка увімкнення камери
+    if st.button("📸 Сканувати камерою", use_container_width=True):
+        st.session_state["use_camera"] = not st.session_state["use_camera"]
+        
+    captured_image = None
+    if st.session_state["use_camera"]:
+        if HAS_BACK_CAMERA:
+            st.info("📷 Увімкнено задню камеру:")
+            captured_image = back_camera_input()
+        else:
+            # Запасний варіант, якщо плагін не встановлено
+            captured_image = st.camera_input("Зробити фото")
+
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
-if submit_btn and user_input:
+if submit_btn and (user_input or captured_image):
     current_time_str = datetime.now(LOCAL_TZ).strftime("%H:%M")
     current_date_str = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
     
-    prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
     try:
-        response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
+        if captured_image:
+            image_bytes = captured_image.getvalue()
+            image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
+            prompt = "Проаналізуй цю страву/продукт з фото. Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs."
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=[image_part, prompt], config=types.GenerateContentConfig(response_mime_type="application/json"))
+        else:
+            prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
+            
         data = json.loads(response.text)
         
-        f_desc = data.get("food_description") or user_input
+        f_desc = data.get("food_description") or user_input or "Фото їжі"
         k_burned = float(data.get("kcal_burned") or 0)
         c_consumed = float(data.get("total_consumed_kcal") or 0)
         prot = float(data.get("total_protein") or 0)
@@ -138,6 +167,7 @@ if submit_btn and user_input:
         
         df_data = pd.concat([df_data, new_entry], ignore_index=True)
         df_data.to_excel(EXCEL_FILE, index=False)
+        st.session_state["use_camera"] = False
         st.rerun()
     except Exception as e: st.error(f"Помилка: {e}")
 
@@ -154,7 +184,6 @@ selected_date = st.selectbox("📅 Вибрати день для перегля
 if st.button("⚙️ Налаштування", use_container_width=True): 
     st.session_state["edit_mode"] = not st.session_state["edit_mode"]
 
-# Повністю вертикальне розташування кнопок без використання st.columns
 btn_del = st.button("🗑️ Видалити", use_container_width=True)
 has_trash = os.path.exists(TRASH_FILE)
 btn_back = st.button("🔄 Повернути", disabled=not has_trash, use_container_width=True)
@@ -250,7 +279,7 @@ if not day_df.empty:
         st.session_state["show_advice"] = True
 
     if st.session_state["show_advice"]:
-        advice_resp = client.models.generate_content(model="gemini-3.5-flash-lite", contents=f"Аналіз за {selected_date}: {consumed} ккал, {protein}г білків. Коротка порада.")
+        advice_resp = client.models.generate_content(model="gemini-2.5-flash", contents=f"Аналіз за {selected_date}: {consumed} ккал, {protein}г білків. Коротка порада.")
         st.markdown(f'<div class="advice-box"><b>💡 Порада:</b><br>{advice_resp.text}</div>', unsafe_allow_html=True)
     
     if st.button("⚠️ Очистити цей день", use_container_width=True):
