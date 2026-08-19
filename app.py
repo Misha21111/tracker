@@ -27,7 +27,7 @@ st.markdown(
     .donut-container {{ display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 15px 0; }}
     .donut-ring {{ width: 190px; height: 190px; border-radius: 50%; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 15px rgba(0,0,0,0.8); }}
     .donut-hole {{ width: 125px; height: 125px; background-color: #141414; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white; }}
-    .macros-row {{ display: flex; justify-content: space-around; width: 100%; max-width: 340px; margin-top: 12px; font-size: 12px; background-color: rgba(20, 20, 20, 0.9); padding: 8px 6px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); }}
+    .macros-row {{ display: flex; justify-content: space-around; width: 100%; max-width: 340px; margin-top: 12px; font-size: 11px; background-color: rgba(20, 20, 20, 0.9); padding: 8px 6px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); }}
     .stButton button {{ width: 100%; border-radius: 10px; }}
 
     .log-item {{
@@ -241,14 +241,15 @@ if not day_df.empty:
         <div class="donut-container">
             <div class="donut-ring" style="background: conic-gradient(#36A2EB 0deg {p_deg}deg, #FFCE56 {p_deg}deg {f_deg}deg, #FF6384 {f_deg}deg {c_deg}deg);">
                 <div class="donut-hole">
-                    <span style="font-size: 11px; color: #aaa;">Дефіцит</span>
-                    <b style="font-size: 16px;">{int(deficit)} ккал</b>
+                    <span style="font-size: 10px; color: #aaa;">Дефіцит: {int(deficit)}</span>
+                    <b style="font-size: 14px;">{int(consumed)} / {target_cal}</b>
+                    <span style="font-size: 9px; color: #888;">ккал</span>
                 </div>
             </div>
             <div class="macros-row">
-                <span>🥩 {protein:.0f}/{user_settings['protein']}г</span>
-                <span>🥑 {fat:.0f}/{user_settings['fat']}г</span>
-                <span>🍞 {carbs:.0f}/{user_settings['carbs']}г</span>
+                <span style="color: #36A2EB;">🥩 Білки: {protein:.0f}г</span>
+                <span style="color: #FFCE56;">🥑 Жири: {fat:.0f}г</span>
+                <span style="color: #FF6384;">🍞 Вугл: {carbs:.0f}г</span>
             </div>
         </div>
     """, unsafe_allow_html=True)
