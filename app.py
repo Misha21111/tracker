@@ -60,7 +60,7 @@ with st.container(border=True):
     st.markdown("### 📥 Введіть дані")
     user_input = st.text_input(
         "Рядок введення:", 
-        placeholder="Наприклад: кроки 5000, яйця 100",
+        placeholder="Наприклад: кроки 5000, спалено 400, яйця 100",
         label_visibility="collapsed"
     )
     submit_btn = st.button("Записати", type="primary", use_container_width=True)
@@ -69,7 +69,10 @@ if submit_btn and user_input:
     parts = [p.strip() for p in user_input.split(',')]
     input_steps = 0
     steps_mentioned = False
-    add_kcal_burned = 0.0
+    
+    input_kcal_burned = 0.0
+    kcal_burned_mentioned = False
+
     add_kcal = add_p = add_f = add_c = 0.0
 
     for part in parts:
@@ -82,7 +85,9 @@ if submit_btn and user_input:
             continue
         if 'ккал' in part_lower or 'спалено' in part_lower or 'калор' in part_lower:
             nums = re.findall(r'\d+(?:\.\d+)?', part)
-            if nums: add_kcal_burned += float(nums[0])
+            if nums: 
+                input_kcal_burned = float(nums[0])
+                kcal_burned_mentioned = True
             continue
         
         match = re.search(r'(.+?)\s+(\d+(?:\.\d+)?)$', part)
@@ -119,10 +124,14 @@ if submit_btn and user_input:
 
     if date_str in df['Дата'].astype(str).values:
         idx = df[df['Дата'].astype(str) == date_str].index[0]
+        
+        # Замінюємо кроки та спалені калорії, якщо вони вказані у записі
         if steps_mentioned:
             df.loc[idx, 'Кроки'] = input_steps
+        if kcal_burned_mentioned:
+            df.loc[idx, 'Спалено (ккал)'] = input_kcal_burned
         
-        df.loc[idx, 'Спалено (ккал)'] += add_kcal_burned
+        # Спожиту їжу плюсуємо до існуючої
         df.loc[idx, 'Спожито (ккал)'] = round(df.loc[idx, 'Спожито (ккал)'] + add_kcal, 1)
         df.loc[idx, 'Білки (г)'] = round(df.loc[idx, 'Білки (г)'] + add_p, 1)
         df.loc[idx, 'Жири (г)'] = round(df.loc[idx, 'Жири (г)'] + add_f, 1)
@@ -133,12 +142,12 @@ if submit_btn and user_input:
             'Дата': [date_str],
             'День тижня': [day_name_ua],
             'Кроки': [input_steps],
-            'Спалено (ккал)': [add_kcal_burned],
+            'Спалено (ккал)': [input_kcal_burned],
             'Спожито (ккал)': [round(add_kcal, 1)],
             'Білки (г)': [round(add_p, 1)],
             'Жири (г)': [round(add_f, 1)],
             'Вуглеводи (г)': [round(add_c, 1)],
-            'Баланс (ккал)': [round(add_kcal - add_kcal_burned, 1)]
+            'Баланс (ккал)': [round(add_kcal - input_kcal_burned, 1)]
         })
         df = pd.concat([df, new_row], ignore_index=True)
 
