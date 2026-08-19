@@ -53,6 +53,22 @@ st.markdown(
         color: #36A2EB;
     }}
     </style>
+    
+    <script>
+    document.addEventListener("DOMContentLoaded", function() {{
+        setTimeout(() => {{
+            const videos = document.querySelectorAll("video");
+            videos.forEach(v => {{
+                if (v.srcObject) {{
+                    const tracks = v.srcObject.getVideoTracks();
+                    tracks.forEach(track => {{
+                        track.applyConstraints({{ facingMode: {{ exact: "environment" }} }}).catch(e => console.log(e));
+                    }});
+                }}
+            }});
+        }}, 1000);
+    }});
+    </script>
     """, unsafe_allow_html=True,
 )
 
@@ -104,7 +120,6 @@ def load_data():
 def clean_float(val):
     if val is None: return 0.0
     if isinstance(val, (int, float)): return float(val)
-    # Видаляємо все, крім цифр, крапки та мінуса
     cleaned = "".join([c for c in str(val) if c.isdigit() or c in ['.', '-']])
     try:
         return float(cleaned) if cleaned else 0.0
@@ -121,17 +136,27 @@ with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     
     camera_photo = None
-    with st.expander("📷 Сканер"):
-        camera_photo = st.camera_input("Зробити знімок їжі")
+    with st.expander("📷 Сканер 📸"):
+        camera_photo = st.camera_input("Зробити знімок їжі", key="back_camera")
         
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
-if submit_btn and (user_input or camera_photo):
+# Обробка збереження (якщо натиснули кнопку або зробили фото)
+should_process = False
+is_camera = False
+
+if submit_btn and user_input:
+    should_process = True
+elif camera_photo is not None:
+    should_process = True
+    is_camera = True
+
+if should_process:
     current_time_str = datetime.now(LOCAL_TZ).strftime("%H:%M")
     current_date_str = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
     
     try:
-        if camera_photo:
+        if is_camera and camera_photo:
             image_bytes = camera_photo.getvalue()
             image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
             prompt = "Проаналізуй цю страву на фото. Визнач що це, приблизну вагу, калорії та БЖВ. Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs."
@@ -142,7 +167,7 @@ if submit_btn and (user_input or camera_photo):
             
         data = json.loads(response.text)
         
-        f_desc = data.get("food_description") or (user_input if not camera_photo else "Фото з камери")
+        f_desc = data.get("food_description") or (user_input if not is_camera else "Фото з камери")
         k_burned = clean_float(data.get("kcal_burned"))
         c_consumed = clean_float(data.get("total_consumed_kcal"))
         prot = clean_float(data.get("total_protein"))
