@@ -1,6 +1,7 @@
 import json
 import os
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 from google import genai
 from google.genai import types
@@ -19,19 +20,25 @@ st.markdown("""
         background-color: #000000;
     }
     div[data-testid="stMetric"], div[data-testid="stMarkdownContainer"], div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: rgba(20, 20, 20, 0.9);
+        background-color: rgba(20, 20, 20, 0.92);
         border-radius: 12px;
-        padding: 8px 12px;
+        padding: 10px 14px;
         color: white;
     }
     .block-container {
         padding-top: 1rem;
         padding-bottom: 1rem;
     }
-    .donut-icon {
-        text-align: center;
-        font-size: 70px;
-        margin: 10px 0;
+    /* Стиль для акуратного та читабельного блоку їжі */
+    .food-box {
+        background-color: rgba(20, 20, 20, 0.92);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 12px 16px;
+        color: #ffffff;
+        font-size: 16px;
+        line-height: 1.5;
+        margin-top: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -79,7 +86,7 @@ if submit_btn and user_input:
     except Exception as e:
         st.error(f'Помилка: {e}')
 
-# --- ВИВЕДЕННЯ ПОНЧИКА ЗАМІСТЬ ГРАФІКА ---
+# --- ВЕЛИКИЙ ПОНЧИК-ДІАГРАМА ТА ВИПРАВЛЕНИЙ ТЕКСТ ЇДИ ---
 if os.path.exists(EXCEL_FILE):
     df_current = pd.read_excel(EXCEL_FILE)
     if not df_current.empty:
@@ -87,12 +94,50 @@ if os.path.exists(EXCEL_FILE):
         
         st.markdown(f"**📅 {latest['Дата']} ({latest['День тижня']})**")
 
-        # Красивий великий пончик по центру замість зламаної картинки
-        st.markdown('<div class="donut-icon">🍩</div>', unsafe_allow_html=True)
+        consumed = float(latest['Спожито (ккал)'])
+        target = BASE_CALORIE_TARGET
+        remaining = max(0, target - consumed)
+        
+        # Розрахунок відсотків для великого пончика
+        consumed_pct = round((consumed / target) * 100) if target > 0 else 0
+        remaining_pct = max(0, 100 - consumed_pct)
+
+        # Створюємо велику та гарну діаграму-пончик
+        fig = go.Figure(data=[go.Pie(
+            labels=['Спожито', 'Залишок'],
+            values=[consumed, remaining],
+            hole=0.7,
+            marker_colors=['#ff5252', '#4CAF50'],
+            textinfo='label+percent',
+            textfont_size=14,
+            hoverinfo='label+value'
+        )])
+
+        fig.update_layout(
+            showlegend=False,
+            margin=dict(t=10, b=10, l=10, r=10),
+            height=320,  # Зробили діаграму помітно більшою
+            paper_bgcolor='rgba(0,0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0,0)',
+            annotations=[{
+                'text': f"<b>{int(consumed)}</b><br><span style='font-size:12px; color:#aaa;'>з {target} ккал</span>",
+                'x': 0.5, 'y': 0.5,
+                'font_size': 20,
+                'font_color': 'white',
+                'showarrow': False
+            }]
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
 
         # Метрики поруч
         c1, c2 = st.columns(2)
-        c1.metric("🥗 Їжа", f"{int(latest['Спожито (ккал)'])} ккал")
+        c1.metric("🥗 Їжа", f"{int(consumed)} ккал")
         c2.metric("🔥 Спорт", f"{int(latest['Спалено (ккал)'])} ккал")
         
-        st.info(f"🍱 {latest['Раціон']}")
+        # Рівний, читабельний блок для раціону їжі без "корявості"
+        st.markdown(f"""
+            <div class="food-box">
+                <b>🍱 Раціон:</b><br>{latest['Raision'] if 'Raision' in latest else latest['Раціон']}
+            </div>
+        """, unsafe_allow_html=True)
