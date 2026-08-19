@@ -14,6 +14,10 @@ st.markdown("""
     .stApp {
         background-color: #0b0b0b;
     }
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
     div[data-testid="stMetric"], div[data-testid="stMarkdownContainer"], div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: rgba(20, 20, 20, 0.95);
         border-radius: 12px;
@@ -96,7 +100,6 @@ now = datetime.now()
 date_str = now.strftime('%Y-%m-%d')
 time_str = now.strftime('%H:%M')
 
-# Функція завантаження або створення датафрейму
 def load_data():
     if os.path.exists(EXCEL_FILE):
         return pd.read_excel(EXCEL_FILE)
@@ -115,7 +118,11 @@ if submit_btn and user_input:
     total_protein (0), total_fat (0), total_carbs (0)."""
     
     try:
-        response = client.models.generate_content(model='gemini-3.6-flash', contents=prompt, config=types.GenerateContentConfig(response_mime_type='application/json'))
+        response = client.models.generate_content(
+            model='gemini-3.5-flash-lite', 
+            contents=prompt, 
+            config=types.GenerateContentConfig(response_mime_type='application/json')
+        )
         data = json.loads(response.text)
         
         c_consumed = float(data.get('total_consumed_kcal') or 0)
@@ -146,9 +153,8 @@ if submit_btn and user_input:
         st.success('✅ Записано!')
         st.rerun()
     except Exception as e:
-        st.error(f'Помилка: {e}')
+        st.error(f'Помилка запиту до API: {e}')
 
-# --- РОЗРАХУНОК СУМ ЗА СЬОГОДНІ ---
 today_df = df_data[df_data['Дата'].astype(str) == date_str]
 
 consumed = today_df['Спожито'].sum()
@@ -157,7 +163,6 @@ protein = today_df['Білки'].sum()
 fat = today_df['Жири'].sum()
 carbs = today_df['Вуглеводи'].sum()
 
-# --- ВІДОБРАЖЕННЯ ПРОГРЕСУ ---
 if not today_df.empty:
     st.markdown(f"**📅 {date_str} ({DAYS_UA.get(now.strftime('%A'))})**")
 
@@ -198,7 +203,6 @@ if not today_df.empty:
     c1.metric("🍽️ З'їв за день", f"{int(consumed)} ккал")
     c2.metric("💪 Спалено на тренуванні", f"{int(burned)} ккал")
 
-    # Відображення списку всіх записів за сьогодні
     log_lines = []
     for _, row in today_df.iterrows():
         icon = "💪" if row['Тип'] == 'Тренування' else "🍽️"
@@ -212,11 +216,9 @@ if not today_df.empty:
         </div>
     """, unsafe_allow_html=True)
 
-    # --- КНОПКИ ВИДАЛЕННЯ (ЗАПИС/ДЕНЬ) ---
     st.markdown("---")
     st.markdown("### 🗑️ Видалення записів")
     
-    # Випадаючий список конкретних записів
     options = {}
     for idx, row in today_df.iterrows():
         icon = "💪" if row['Тип'] == 'Тренування' else "🍽️"
