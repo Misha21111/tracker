@@ -29,7 +29,6 @@ st.markdown("""
         padding-top: 1rem;
         padding-bottom: 1rem;
     }
-    /* Стиль для акуратного та читабельного блоку їжі */
     .food-box {
         background-color: rgba(20, 20, 20, 0.92);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -97,47 +96,39 @@ if os.path.exists(EXCEL_FILE):
         consumed = float(latest['Спожито (ккал)'])
         target = BASE_CALORIE_TARGET
         remaining = max(0, target - consumed)
-        
-        # Розрахунок відсотків для великого пончика
-        consumed_pct = round((consumed / target) * 100) if target > 0 else 0
-        remaining_pct = max(0, 100 - consumed_pct)
 
-        # Створюємо велику та гарну діаграму-пончик
         fig = go.Figure(data=[go.Pie(
             labels=['Спожито', 'Залишок'],
             values=[consumed, remaining],
             hole=0.7,
-            marker_colors=['#ff5252', '#4CAF50'],
+            marker=dict(colors=['#ff5252', '#4CAF50']),
             textinfo='label+percent',
-            textfont_size=14,
+            textfont=dict(size=14, color='white'),
             hoverinfo='label+value'
         )])
 
         fig.update_layout(
             showlegend=False,
             margin=dict(t=10, b=10, l=10, r=10),
-            height=320,  # Зробили діаграму помітно більшою
-            paper_bgcolor='rgba(0,0,0,0,0)',
+            height=320,
+            paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0,0)',
-            annotations=[{
-                'text': f"<b>{int(consumed)}</b><br><span style='font-size:12px; color:#aaa;'>з {target} ккал</span>",
-                'x': 0.5, 'y': 0.5,
-                'font_size': 20,
-                'font_color': 'white',
-                'showarrow': False
-            }]
+            annotations=[dict(
+                text=f"<b>{int(consumed)}</b><br><span style='font-size:12px; color:#aaa;'>з {target} ккал</span>",
+                x=0.5, y=0.5,
+                font=dict(size=20, color='white'),
+                showarrow=False
+            )]
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # Метрики поруч
         c1, c2 = st.columns(2)
         c1.metric("🥗 Їжа", f"{int(consumed)} ккал")
         c2.metric("🔥 Спорт", f"{int(latest['Спалено (ккал)'])} ккал")
         
-        # Рівний, читабельний блок для раціону їжі без "корявості"
         st.markdown(f"""
             <div class="food-box">
-                <b>🍱 Раціон:</b><br>{latest['Raision'] if 'Raision' in latest else latest['Раціон']}
+                <b>🍱 Раціон:</b><br>{latest['Раціон']}
             </div>
         """, unsafe_allow_html=True)
