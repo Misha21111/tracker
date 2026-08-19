@@ -110,12 +110,14 @@ df_data = load_data()
 if submit_btn and user_input:
     prompt = f"""Аналізуй текст: "{user_input}". 
     Визнач, чи це їжа/калорії які людина спожила, чи це спалені калорії на тренуванні/активності.
-    Якщо в тексті є слова "спалено", "тренування", "калорії" у контексті витрати чи просто цифра тренування — записуй їх у kcal_burned. Якщо це їжа — у total_consumed_kcal.
+    Якщо в тексті є слова "спалено", "тренування", "калорії" у контексті витрати чи просто цифра тренування — записуй їх у kcal_burned. Якщо це їжа — розрахуй спожиті калорії (total_consumed_kcal) та грами БЖВ (total_protein, total_fat, total_carbs) на основі вказаної ваги продуктів.
     Поверни JSON із полями: 
     food_description (опис), 
     kcal_burned (спалені калорії або 0), 
     total_consumed_kcal (спожиті калорії або 0), 
-    total_protein (0), total_fat (0), total_carbs (0)."""
+    total_protein (грами білків), 
+    total_fat (грами жирів), 
+    total_carbs (грами вуглеводів)."""
     
     try:
         response = client.models.generate_content(
