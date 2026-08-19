@@ -74,7 +74,7 @@ if submit_btn and user_input:
     except Exception as e:
         st.error(f'Помилка: {e}')
 
-# --- ЗАМІСТЬ КРУГОВОГО ГРАФІКА — ТВОЯ КАРТИНКА ПОНЧИКА ---
+# --- ВИВЕДЕННЯ КАРТИНКИ ПОНЧИКА ЗАМІСТЬ ГРАФІКА ---
 if os.path.exists(EXCEL_FILE):
     df_current = pd.read_excel(EXCEL_FILE)
     if not df_current.empty:
@@ -82,10 +82,10 @@ if os.path.exists(EXCEL_FILE):
         
         st.markdown(f"**📅 {latest['Дата']} ({latest['День тижня']})**")
 
-        # Виводимо картинку пончика по центру замість графіка
+        # Виводимо картинку пончика акуратно по центру
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            st.image("https://i.ibb.co/609Jt7L/donut.png", use_column_width=True)
+            st.image("https://i.ibb.co/609Jt7L/donut.png", use_container_width=True)
 
         # Метрики поруч
         c1, c2 = st.columns(2)
