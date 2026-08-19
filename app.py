@@ -11,7 +11,7 @@ st.set_page_config(page_title='Мій Фітнес', layout='centered')
 st.markdown("""
     <style>
     .stApp {
-        background-image: linear-gradient(rgba(10, 10, 10, 0.75), rgba(10, 10, 10, 0.75)), url("https://i.ibb.co/jXZnnG5/IMG-20260819-144933.jpg");
+        background-image: url("https://i.ibb.co/jXZnnG5/IMG-20260819-144933.jpg");
         background-repeat: no-repeat;
         background-position: center center;
         background-attachment: fixed;
@@ -139,7 +139,6 @@ if os.path.exists(EXCEL_FILE):
         fat = float(latest.get('Жири (г)', 0))
         carbs = float(latest.get('Вуглеводи (г)', 0))
 
-        # Розрахунок калорій з БЖУ для градієнта пончика
         p_kcal = protein * 4
         f_kcal = fat * 9
         c_kcal = carbs * 4
@@ -151,15 +150,16 @@ if os.path.exists(EXCEL_FILE):
             c_pct = 100 - p_pct - f_pct
             
             p_deg = int((p_pct / 100) * 360)
-            pf_deg = p_deg + int((f_pct / 100) * 360)
-            gradient_style = f"background: conic-gradient(#36A2EB 0deg {p_deg}deg, #FFCE56 {p_deg}deg {pf_deg}deg, #FF6384 {pf_deg}deg 360deg);"
+            f_deg = p_deg + int((f_pct / 100) * 360)
+            
+            gradient_style = f"background: conic-gradient(#36A2EB 0deg {p_deg}deg, #FFCE56 {p_deg}deg {f_deg}deg, #FF6384 {f_deg}deg 360deg);"
         else:
             p_pct, f_pct, c_pct = 0, 0, 0
             gradient_style = "background: #333;"
 
         percent_target = min(100, int((consumed / BASE_CALORIE_TARGET) * 100))
 
-        # Пончик з БЖУ та калоріями всередині
+        # Пончик без плутаних відсотків БЖУ, тільки грами
         st.markdown(f"""
             <div class="donut-container">
                 <div class="donut-ring" style="{gradient_style}">
@@ -170,19 +170,17 @@ if os.path.exists(EXCEL_FILE):
                     </div>
                 </div>
                 <div class="macros-row">
-                    <span style="color:#36A2EB;">🥩 Білки: <b>{protein:.0f}г</b> ({p_pct}%)</span>
-                    <span style="color:#FFCE56;">🥑 Жири: <b>{fat:.0f}г</b> ({f_pct}%)</span>
-                    <span style="color:#FF6384;">🍞 Вугл: <b>{carbs:.0f}г</b> ({c_pct}%)</span>
+                    <span style="color:#36A2EB;">🥩 Білки: <b>{protein:.0f}г</b></span>
+                    <span style="color:#FFCE56;">🥑 Жири: <b>{fat:.0f}г</b></span>
+                    <span style="color:#FF6384;">🍞 Вугл: <b>{carbs:.0f}г</b></span>
                 </div>
             </div>
         """, unsafe_allow_html=True)
 
-        # Зрозумілі картки
         c1, c2 = st.columns(2)
         c1.metric("🍽️ З'їв за день", f"{int(consumed)} ккал")
         c2.metric("💪 Спалено на тренуванні", f"{int(burned)} ккал")
         
-        # Що саме з'їв
         st.markdown(f"""
             <div class="food-box">
                 <b>📝 Що ти їв сьогодні:</b><br>{latest['Раціон']}
