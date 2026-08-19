@@ -97,13 +97,17 @@ with st.container(border=True):
     user_input = st.text_input('📥 Введи, що зїв / тренування:', placeholder="Наприклад: з'їв 30г хліба, спалено 300 ккал")
     submit_btn = st.button('Записати', type='primary', use_container_width=True)
 
+now = pd.Timestamp.today()
+date_str = now.strftime('%Y-%m-%d')
+
 if submit_btn and user_input:
     prompt = f"""Аналізуй текст: "{user_input}". 
-    Поверни обов'язково у форматі JSON такі поля: 
-    food_description (опис їжі або те що введено), 
+    Суворо розділяй значення! 
+    Поверни JSON із полями: 
+    food_description (опис їжі, якщо це їжа), 
     steps (число кроків або 0), 
-    kcal_burned (спалені калорії або 0), 
-    total_consumed_kcal (спожиті калорії з тексту), 
+    kcal_burned (ТІЛЬКИ спалені калорії на тренуванні/активності, або 0), 
+    total_consumed_kcal (ТІЛЬКИ з'їдені спожиті калорії, або 0), 
     total_protein (грами білків або 0), 
     total_fat (грами жирів або 0), 
     total_carbs (грами вуглеводів або 0)."""
@@ -115,9 +119,6 @@ if submit_btn and user_input:
         if os.path.exists(EXCEL_FILE): df = pd.read_excel(EXCEL_FILE)
         else: df = pd.DataFrame(columns=['Дата', 'День тижня', 'Раціон', 'Кроки', 'Спалено (ккал)', 'Спожито (ккал)', 'Білки (г)', 'Жири (г)', 'Вуглеводи (г)', 'Баланс (ккал)'])
 
-        now = pd.Timestamp.today()
-        date_str = now.strftime('%Y-%m-%d')
-        
         c_consumed = float(data.get('total_consumed_kcal') or 0)
         c_burned = float(data.get('kcal_burned') or 0)
         c_protein = float(data.get('total_protein') or 0)
@@ -129,31 +130,34 @@ if submit_btn and user_input:
         if date_str in df['Дата'].astype(str).values:
             idx = df[df['Дата'].astype(str) == date_str].index[0]
             
-            # Додаємо до списку їжі новий рядок через кому/крапку з комою, щоб бачити що саме ти додав
-            old_desc = str(df.loc[idx, 'Раціон'])
-            df.loc[idx, 'Раціон'] = f"{old_desc}; {c_desc}" if old_desc else c_desc
+            if c_consumed > 0:
+                old_desc = str(df.loc[idx, 'Раціон'])
+                df.loc[idx, 'Раціон'] = f"{old_desc}; {c_desc}" if old_desc and old_desc != 'nan' else c_desc
+                df.loc[idx, 'Спожито (ккал)'] = float(df.loc[idx, 'Спожито (ккал)']) + c_consumed
+                df.loc[idx, 'Білки (г)'] = float(df.loc[idx, 'Білки (г)']) + c_protein
+                df.loc[idx, 'Жири (г)'] = float(df.loc[idx, 'Жири (г)']) + c_fat
+                df.loc[idx, 'Вуглеводи (г)'] = float(df.loc[idx, 'Вуглеводи (г)']) + c_carbs
             
-            df.loc[idx, 'Спожито (ккал)'] = float(df.loc[idx, 'Спожито (ккал)']) + c_consumed
-            df.loc[idx, 'Спалено (ккал)'] = float(df.loc[idx, 'Спалено (ккал)']) + c_burned
-            df.loc[idx, 'Білки (г)'] = float(df.loc[idx, 'Білки (г)']) + c_protein
-            df.loc[idx, 'Жири (г)'] = float(df.loc[idx, 'Жири (г)']) + c_fat
-            df.loc[idx, 'Вуглеводи (г)'] = float(df.loc[idx, 'Вуглеводи (г)']) + c_carbs
+            if c_burned > 0:
+                df.loc[idx, 'Спалено (ккал)'] = float(df.loc[idx, 'Спалено (ккал)']) + c_burned
+                
+            if c_steps > 0:
+                df.loc[idx, 'Кроки'] = float(df.loc[idx, 'Кроки']) + c_steps
+                
             df.loc[idx, 'Баланс (ккал)'] = float(df.loc[idx, 'Спожито (ккал)']) - float(df.loc[idx, 'Спалено (ккал)'])
         else:
             new_row = pd.DataFrame({
                 'Дата': [date_str], 
                 'День тижня': [DAYS_UA.get(now.strftime('%A'))], 
-                'Раціон': [c_desc], 
+                'Раціон': [c_desc if c_consumed > 0 else ''], 
                 'Кроки': [c_steps], 
                 'Спалено (ккал)': [c_burned], 
                 'Спожито (ккал)': [c_consumed], 
                 'Білки (г)': [c_protein], 
                 'Жири (г)': [c_fat], 
                 'Вуглеводи (г)': [c_carbs], 
-                'Баланс (ккал)deselect': [c_consumed - c_burned]
+                'Баланс (ккал)': [c_consumed - c_burned]
             })
-            # Виправляємо назву колонки Баланс без помилок
-            new_row.columns = ['Дата', 'День тижня', 'Раціон', 'Кроки', 'Спалено (ккал)', 'Спожито (ккал)', 'Білки (г)', 'Жири (г)', 'Вуглеводи (г)', 'Баланс (ккал)']
             df = pd.concat([df, new_row], ignore_index=True)
             
         df.to_excel(EXCEL_FILE, index=False)
@@ -162,11 +166,21 @@ if submit_btn and user_input:
     except Exception as e:
         st.error(f'Помилка: {e}')
 
+# --- КНОПКА ОЧИЩЕННЯ ДНЯ ---
+if os.path.exists(EXCEL_FILE):
+    df_check = pd.read_excel(EXCEL_FILE)
+    if date_str in df_check['Дата'].astype(str).values:
+        if st.button("🗑️ Очистити дані за сьогодні", use_container_width=True):
+            df_check = df_check[df_check['Дата'].astype(str) != date_str]
+            df_check.to_excel(EXCEL_FILE, index=False)
+            st.success("Дані за сьогодні очищено!")
+            st.rerun()
+
 # --- ВИВЕДЕННЯ ІНФОРМАЦІЇ ---
 if os.path.exists(EXCEL_FILE):
     df_current = pd.read_excel(EXCEL_FILE)
-    if not df_current.empty:
-        latest = df_current.sort_values(by='Дата', ascending=False).iloc[0]
+    if not df_current.empty and date_str in df_current['Дата'].astype(str).values:
+        latest = df_current[df_current['Дата'].astype(str) == date_str].iloc[0]
         
         st.markdown(f"**📅 {latest['Дата']} ({latest['День тижня']})**")
 
