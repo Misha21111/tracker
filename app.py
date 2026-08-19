@@ -85,19 +85,19 @@ if st.session_state["edit_mode"]:
             st.session_state["edit_mode"] = False
             st.rerun()
 
-with st.container(border=True):
-    user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
-    submit_btn = st.button("Записати", type="primary", use_container_width=True)
-
-now = datetime.now()
-date_str, time_str = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
-
 def load_data():
     if os.path.exists(EXCEL_FILE):
         return pd.read_excel(EXCEL_FILE)
     return pd.DataFrame(columns=["Дата", "Час", "Опис", "Тип", "Спожито", "Спалено", "Білки", "Жири", "Вуглеводи"])
 
 df_data = load_data()
+
+with st.container(border=True):
+    user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
+    submit_btn = st.button("Записати", type="primary", use_container_width=True)
+
+now = datetime.now()
+date_str, time_str = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
 
 if submit_btn and user_input:
     st.session_state["history"].append(df_data.copy())
