@@ -62,6 +62,7 @@ TRASH_FILE = "fitness_trash.json"
 
 if "show_advice" not in st.session_state: st.session_state["show_advice"] = False
 if "edit_mode" not in st.session_state: st.session_state["edit_mode"] = False
+if "open_camera" not in st.session_state: st.session_state["open_camera"] = False
 
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 if not api_key: 
@@ -108,7 +109,18 @@ st.title("🏋️ Мій фітнес")
 
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
-    captured_image = st.camera_input("📸 Зробити фото камерою")
+    
+    captured_image = None
+    if not st.session_state["open_camera"]:
+        if st.button("📸 Увімкнути камеру"):
+            st.session_state["open_camera"] = True
+            st.rerun()
+    else:
+        captured_image = st.camera_input("📸 Зробити фото камерою")
+        if st.button("❌ Вимкнути камеру"):
+            st.session_state["open_camera"] = False
+            st.rerun()
+
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
 
 if submit_btn and (user_input or captured_image):
@@ -146,6 +158,7 @@ if submit_btn and (user_input or captured_image):
         
         df_data = pd.concat([df_data, new_entry], ignore_index=True)
         df_data.to_excel(EXCEL_FILE, index=False)
+        st.session_state["open_camera"] = False
         st.rerun()
     except Exception as e: st.error(f"Помилка: {e}")
 
@@ -212,7 +225,7 @@ if not day_df.empty:
         total_burned = explicit_burned + bmr_total
 
     target_cal = user_settings["calories"]
-    deficit = target_cal - consumed
+    deficit = total_burned - consumed
 
     st.markdown(f"**📅 {selected_date} | Вага: ~{w_data.get('current_weight', 89.0):.1f} кг**")
     
@@ -232,7 +245,6 @@ if not day_df.empty:
                 <div class="donut-hole">
                     <b style="font-size: 15px;">{int(consumed)}</b>
                     <span style="font-size: 11px; color: #aaa;">із {target_cal} ккал</span>
-                    <span style="font-size: 11px; color: #36A2EB; margin-top: 2px;">Дефіцит: {int(deficit)}</span>
                 </div>
             </div>
             <div class="macros-row">
