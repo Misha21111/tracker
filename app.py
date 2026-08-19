@@ -11,13 +11,7 @@ st.set_page_config(page_title='Мій Фітнес', layout='centered')
 st.markdown("""
     <style>
     .stApp {
-        background-image: url("https://i.ibb.co/jXZnnG5/IMG-20260819-144933.jpg");
-        background-repeat: no-repeat;
-        background-position: center center;
-        background-attachment: fixed;
-        background-size: cover;
-        image-rendering: -webkit-optimize-contrast;
-        image-rendering: crisp-edges;
+        background-color: #0b0b0b;
     }
     div[data-testid="stMetric"], div[data-testid="stMarkdownContainer"], div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: rgba(20, 20, 20, 0.95);
@@ -94,7 +88,7 @@ client = genai.Client(api_key=api_key)
 st.title("🏋️ Мій фітнес")
 
 with st.container(border=True):
-    user_input = st.text_input('📥 Введи, що зїв / тренування:', placeholder="Наприклад: з'їв 30г хліба, спалено 300 ккал")
+    user_input = st.text_input('📥 Введи, що зїв / тренування:', placeholder="Наприклад: з'їв 30г хліба, спалено 300 ккал або Калорії 161")
     submit_btn = st.button('Записати', type='primary', use_container_width=True)
 
 now = pd.Timestamp.today()
@@ -102,15 +96,14 @@ date_str = now.strftime('%Y-%m-%d')
 
 if submit_btn and user_input:
     prompt = f"""Аналізуй текст: "{user_input}". 
-    Суворо розділяй значення! 
+    Визнач, чи це їжа/калорії які людина спожила, чи це спалені калорії на тренуванні/активності.
+    Якщо в тексті є слова "спалено", "тренування", "калорії" у контексті витрати чи просто цифра тренування — записуй їх у kcal_burned. Якщо це їжа — у total_consumed_kcal.
     Поверни JSON із полями: 
-    food_description (опис їжі, якщо це їжа), 
+    food_description (опис), 
     steps (число кроків або 0), 
-    kcal_burned (ТІЛЬКИ спалені калорії на тренуванні/активності, або 0), 
-    total_consumed_kcal (ТІЛЬКИ з'їдені спожиті калорії, або 0), 
-    total_protein (грами білків або 0), 
-    total_fat (грами жирів або 0), 
-    total_carbs (грами вуглеводів або 0)."""
+    kcal_burned (спалені калорії або 0), 
+    total_consumed_kcal (спожиті калорії або 0), 
+    total_protein (0), total_fat (0), total_carbs (0)."""
     
     try:
         response = client.models.generate_content(model='gemini-3.6-flash', contents=prompt, config=types.GenerateContentConfig(response_mime_type='application/json'))
@@ -139,6 +132,8 @@ if submit_btn and user_input:
                 df.loc[idx, 'Вуглеводи (г)'] = float(df.loc[idx, 'Вуглеводи (г)']) + c_carbs
             
             if c_burned > 0:
+                old_desc = str(df.loc[idx, 'Раціон'])
+                df.loc[idx, 'Раціон'] = f"{old_desc}; Тренування: {c_burned} ккал" if old_desc and old_desc != 'nan' else f"Тренування: {c_burned} ккал"
                 df.loc[idx, 'Спалено (ккал)'] = float(df.loc[idx, 'Спалено (ккал)']) + c_burned
                 
             if c_steps > 0:
@@ -146,18 +141,23 @@ if submit_btn and user_input:
                 
             df.loc[idx, 'Баланс (ккал)'] = float(df.loc[idx, 'Спожито (ккал)']) - float(df.loc[idx, 'Спалено (ккал)'])
         else:
+            init_burned = c_burned if c_burned > 0 else 0
+            init_consumed = c_consumed if c_consumed > 0 else 0
+            init_desc = c_desc if c_consumed > 0 else (f"Тренування: {c_burned} ккал" if c_burned > 0 else c_desc)
+            
             new_row = pd.DataFrame({
                 'Дата': [date_str], 
                 'День тижня': [DAYS_UA.get(now.strftime('%A'))], 
-                'Раціон': [c_desc if c_consumed > 0 else ''], 
+                'Раціон': [init_desc], 
                 'Кроки': [c_steps], 
-                'Спалено (ккал)': [c_burned], 
-                'Спожито (ккал)': [c_consumed], 
+                'Спалено (ккал)': [init_burned], 
+                'Спожито (ккал)': [init_consumed], 
                 'Білки (г)': [c_protein], 
-                'Жири (г)': [c_fat], 
-                'Вуглеводи (г)': [c_carbs], 
-                'Баланс (ккал)': [c_consumed - c_burned]
+                'Жири (г)': [0], 
+                'Вуглеводи (г)': [0], 
+                'Баланс (ккал)': [init_consumed - init_burned]
             })
+            new_row.columns = ['Дата', 'День тижня', 'Раціон', 'Кроки', 'Спалено (ккал)', 'Спожито (ккал)', 'Білки (г)', 'Жири (г)', 'Вуглеводи (г)', 'Баланс (ккал)']
             df = pd.concat([df, new_row], ignore_index=True)
             
         df.to_excel(EXCEL_FILE, index=False)
@@ -166,15 +166,24 @@ if submit_btn and user_input:
     except Exception as e:
         st.error(f'Помилка: {e}')
 
-# --- КНОПКА ОЧИЩЕННЯ ДНЯ ---
+# --- КНОПКИ КЕРУВАННЯ ТА ОЧИЩЕННЯ ---
 if os.path.exists(EXCEL_FILE):
     df_check = pd.read_excel(EXCEL_FILE)
     if date_str in df_check['Дата'].astype(str).values:
-        if st.button("🗑️ Очистити дані за сьогодні", use_container_width=True):
-            df_check = df_check[df_check['Дата'].astype(str) != date_str]
-            df_check.to_excel(EXCEL_FILE, index=False)
-            st.success("Дані за сьогодні очищено!")
-            st.rerun()
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if st.button("🗑️ Очистити весь день", use_container_width=True):
+                df_check = df_check[df_check['Дата'].astype(str) != date_str]
+                df_check.to_excel(EXCEL_FILE, index=False)
+                st.success("День повністю очищено!")
+                st.rerun()
+        with col_btn2:
+            if st.button("🔄 Скинути тільки спалені", use_container_width=True):
+                idx = df_check[df_check['Дата'].astype(str) == date_str].index[0]
+                df_check.loc[idx, 'Спалено (ккал)'] = 0
+                df_check.to_excel(EXCEL_FILE, index=False)
+                st.success("Спалені калорії скинуто!")
+                st.rerun()
 
 # --- ВИВЕДЕННЯ ІНФОРМАЦІЇ ---
 if os.path.exists(EXCEL_FILE):
@@ -233,6 +242,6 @@ if os.path.exists(EXCEL_FILE):
         
         st.markdown(f"""
             <div class="food-box">
-                <b>📝 Що ти їв сьогодні:</b><br>{latest['Раціон']}
+                <b>📝 Що ти їв сьогодні / Лог:</b><br>{latest['Раціон']}
             </div>
         """, unsafe_allow_html=True)
