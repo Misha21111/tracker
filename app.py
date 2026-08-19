@@ -68,7 +68,7 @@ if submit_btn and user_input:
   try:
     with st.spinner('Штучний інтелект аналізує запис...'):
       response = client.models.generate_content(
-          model='gemini-2.5-flash',
+          model='gemini-3.6-flash',
           contents=prompt,
           config=types.GenerateContentConfig(
               response_mime_type='application/json'
