@@ -93,6 +93,7 @@ with st.container(border=True):
 
 now = pd.Timestamp.today()
 date_str = now.strftime('%Y-%m-%d')
+log_file = 'fitness_logs.xlsx' # Окремий файл для детальної історії записів за день
 
 if submit_btn and user_input:
     prompt = f"""Аналізуй текст: "{user_input}". 
@@ -109,55 +110,57 @@ if submit_btn and user_input:
         response = client.models.generate_content(model='gemini-3.6-flash', contents=prompt, config=types.GenerateContentConfig(response_mime_type='application/json'))
         data = json.loads(response.text)
         
-        if os.path.exists(EXCEL_FILE): df = pd.read_excel(EXCEL_FILE)
-        else: df = pd.DataFrame(columns=['Дата', 'День тижня', 'Раціон', 'Кроки', 'Спалено (ккал)', 'Спожито (ккал)', 'Білки (г)', 'Жири (г)', 'Вуглеводи (г)', 'Баланс (ккал)'])
+        # 1. Зберігаємо детальний запис в історію логів
+        if os.path.exists(log_file): df_logs = pd.read_excel(log_file)
+        else: df_logs = pd.DataFrame(columns=['Дата', 'Опис', 'Тип', 'Калорії', 'Білки', 'Жири', 'Вуглеводи'])
 
         c_consumed = float(data.get('total_consumed_kcal') or 0)
         c_burned = float(data.get('kcal_burned') or 0)
         c_protein = float(data.get('total_protein') or 0)
         c_fat = float(data.get('total_fat') or 0)
         c_carbs = float(data.get('total_carbs') or 0)
-        c_steps = float(data.get('steps') or 0)
         c_desc = str(data.get('food_description') or user_input)
+
+        if c_consumed > 0:
+            new_log = pd.DataFrame({'Дата': [date_str], 'Опис': [c_desc], 'Тип': ['Їжа'], 'Калорії': [c_consumed], 'Білки': [c_protein], 'Жири': [c_fat], 'Вуглеводи': [c_carbs]})
+            df_logs = pd.concat([df_logs, new_log], ignore_index=True)
+        elif c_burned > 0:
+            new_log = pd.DataFrame({'Дата': [date_str], 'Опис': [f"Тренування: {c_burned} ккал"], 'Тип': ['Тренування'], 'Калорії': [c_burned], 'Білки': [0], 'Жири': [0], 'Вуглеводи': [0]})
+            df_logs = pd.concat([df_logs, new_log], ignore_index=True)
+        else:
+            new_log = pd.DataFrame({'Дата': [date_str], 'Опис': [c_desc], 'Тип': ['Їжа'], 'Калорії': [0], 'Білки': [0], 'Жири': [0], 'Вуглеводи': [0]})
+            df_logs = pd.concat([df_logs, new_log], ignore_index=True)
+            
+        df_logs.to_excel(log_file, index=False)
+
+        # 2. Перераховуємо загальний звіт за день та зберігаємо в EXCEL_FILE
+        df_day_logs = df_logs[df_logs['Дата'].astype(str) == date_str]
+        total_cons = df_day_logs[df_day_logs['Тип'] == 'Їжа']['Калорії'].sum()
+        total_burn = df_day_logs[df_day_logs['Тип'] == 'Тренування']['Калорії'].sum()
+        total_prot = df_day_logs['Білки'].sum()
+        total_fat_val = df_day_logs['Жири'].sum()
+        total_carb = df_day_logs['Вуглеводи'].sum()
+        all_descs = "; ".join(df_day_logs['Опис'].astype(str).tolist())
+
+        if os.path.exists(EXCEL_FILE): df = pd.read_excel(EXCEL_FILE)
+        else: df = pd.DataFrame(columns=['Дата', 'День тижня', 'Раціон', 'Кроки', 'Спалено (ккал)', 'Спожито (ккал)', 'Білки (г)', 'Жири (г)', 'Вуглеводи (г)', 'Баланс (ккал)'])
 
         if date_str in df['Дата'].astype(str).values:
             idx = df[df['Дата'].astype(str) == date_str].index[0]
-            
-            if c_consumed > 0:
-                old_desc = str(df.loc[idx, 'Раціон'])
-                df.loc[idx, 'Раціон'] = f"{old_desc}; {c_desc}" if old_desc and old_desc != 'nan' else c_desc
-                df.loc[idx, 'Спожито (ккал)'] = float(df.loc[idx, 'Спожито (ккал)']) + c_consumed
-                df.loc[idx, 'Білки (г)'] = float(df.loc[idx, 'Білки (г)']) + c_protein
-                df.loc[idx, 'Жири (г)'] = float(df.loc[idx, 'Жири (г)']) + c_fat
-                df.loc[idx, 'Вуглеводи (г)'] = float(df.loc[idx, 'Вуглеводи (г)']) + c_carbs
-            
-            if c_burned > 0:
-                old_desc = str(df.loc[idx, 'Раціон'])
-                df.loc[idx, 'Раціон'] = f"{old_desc}; Тренування: {c_burned} ккал" if old_desc and old_desc != 'nan' else f"Тренування: {c_burned} ккал"
-                df.loc[idx, 'Спалено (ккал)'] = float(df.loc[idx, 'Спалено (ккал)']) + c_burned
-                
-            if c_steps > 0:
-                df.loc[idx, 'Кроки'] = float(df.loc[idx, 'Кроки']) + c_steps
-                
-            df.loc[idx, 'Баланс (ккал)'] = float(df.loc[idx, 'Спожито (ккал)']) - float(df.loc[idx, 'Спалено (ккал)'])
+            df.loc[idx, 'Раціон'] = all_descs
+            df.loc[idx, 'Спожито (ккал)'] = total_cons
+            df.loc[idx, 'Спалено (ккал)'] = total_burn
+            df.loc[idx, 'Білки (г)'] = total_prot
+            df.loc[idx, 'Жири (г)'] = total_fat_val
+            df.loc[idx, 'Вуглеводи (г)'] = total_carb
+            df.loc[idx, 'Баланс (ккал)'] = total_cons - total_burn
         else:
-            init_burned = c_burned if c_burned > 0 else 0
-            init_consumed = c_consumed if c_consumed > 0 else 0
-            init_desc = c_desc if c_consumed > 0 else (f"Тренування: {c_burned} ккал" if c_burned > 0 else c_desc)
-            
             new_row = pd.DataFrame({
-                'Дата': [date_str], 
-                'День тижня': [DAYS_UA.get(now.strftime('%A'))], 
-                'Раціон': [init_desc], 
-                'Кроки': [c_steps], 
-                'Спалено (ккал)': [init_burned], 
-                'Спожито (ккал)': [init_consumed], 
-                'Білки (г)': [c_protein], 
-                'Жири (г)': [0], 
-                'Вуглеводи (г)': [0], 
-                'Баланс (ккал)': [init_consumed - init_burned]
+                'Дата': [date_str], 'День тижня': [DAYS_UA.get(now.strftime('%A'))], 
+                'Раціон': [all_descs], 'Кроки': [0], 'Спалено (ккал)': [total_burn], 
+                'Спожито (ккал)': [total_cons], 'Білки (г)': [total_prot], 
+                'Жири (г)': [total_fat_val], 'Вуглеводи (г)': [total_carb], 'Баланс (ккал)': [total_cons - total_burn]
             })
-            new_row.columns = ['Дата', 'День тижня', 'Раціон', 'Кроки', 'Спалено (ккал)', 'Спожито (ккал)', 'Білки (г)', 'Жири (г)', 'Вуглеводи (г)', 'Баланс (ккал)']
             df = pd.concat([df, new_row], ignore_index=True)
             
         df.to_excel(EXCEL_FILE, index=False)
@@ -166,26 +169,66 @@ if submit_btn and user_input:
     except Exception as e:
         st.error(f'Помилка: {e}')
 
-# --- КНОПКИ КЕРУВАННЯ ТА ОЧИЩЕННЯ ---
-if os.path.exists(EXCEL_FILE):
-    df_check = pd.read_excel(EXCEL_FILE)
-    if date_str in df_check['Дата'].astype(str).values:
-        col_btn1, col_btn2 = st.columns(2)
-        with col_btn1:
-            if st.button("🗑️ Очистити весь день", use_container_width=True):
-                df_check = df_check[df_check['Дата'].astype(str) != date_str]
-                df_check.to_excel(EXCEL_FILE, index=False)
-                st.success("День повністю очищено!")
-                st.rerun()
-        with col_btn2:
-            if st.button("🔄 Скинути тільки спалені", use_container_width=True):
-                idx = df_check[df_check['Дата'].astype(str) == date_str].index[0]
-                df_check.loc[idx, 'Спалено (ккал)'] = 0
-                df_check.to_excel(EXCEL_FILE, index=False)
-                st.success("Спалені калорії скинуто!")
+# --- БЛОК ВИДАЛЕННЯ ТА ОЧИЩЕННЯ ---
+if os.path.exists(log_file):
+    df_logs_check = pd.read_excel(log_file)
+    today_logs = df_logs_check[df_logs_check['Дата'].astype(str) == date_str]
+    
+    if not today_logs.empty:
+        st.markdown("### 🗑️ Керування записами")
+        col_del1, col_del2 = st.columns([2, 1])
+        
+        with col_del1:
+            # Випадаючий список для вибору конкретного запису
+            options = {f"{row['Тип']}: {row['Опис']} ({row['Калорії']} ккал) [ID: {idx}]": idx for idx, row in today_logs.iterrows()}
+            selected_option = st.selectbox("Вибери запис для видалення:", options=list(options.keys()))
+            
+        with col_del2:
+            st.write("") # відступ
+            st.write("")
+            if st.button("🗑️ Видалити вибране", use_container_width=True):
+                target_idx = options[selected_option]
+                df_logs_check = df_logs_check.drop(target_idx)
+                df_logs_check.to_excel(log_file, index=False)
+                
+                # Перераховуємо підсумки дня після видалення
+                df_day_logs = df_logs_check[df_logs_check['Дата'].astype(str) == date_str]
+                total_cons = df_day_logs[df_day_logs['Тип'] == 'Їжа']['Калорії'].sum()
+                total_burn = df_day_logs[df_day_logs['Тип'] == 'Тренування']['Калорії'].sum()
+                total_prot = df_day_logs['Білки'].sum()
+                total_fat_val = df_day_logs['Жири'].sum()
+                total_carb = df_day_logs['Вуглеводи'].sum()
+                all_descs = "; ".join(df_day_logs['Опис'].astype(str).tolist())
+                
+                df_main = pd.read_excel(EXCEL_FILE)
+                idx_main = df_main[df_main['Дата'].astype(str) == date_str].index[0]
+                
+                if df_day_logs.empty:
+                    df_main = df_main[df_main['Дата'].astype(str) != date_str]
+                else:
+                    df_main.loc[idx_main, 'Раціон'] = all_descs
+                    df_main.loc[idx_main, 'Спожито (ккал)'] = total_cons
+                    df_main.loc[idx_main, 'Спалено (ккал)'] = total_burn
+                    df_main.loc[idx_main, 'Білки (г)'] = total_prot
+                    df_main.loc[idx_main, 'Жири (г)'] = total_fat_val
+                    df_main.loc[idx_main, 'Вуглеводи (г)'] = total_carb
+                    df_main.loc[idx_main, 'Баланс (ккал)'] = total_cons - total_burn
+                    
+                df_main.to_excel(EXCEL_FILE, index=False)
+                st.success("Вибраний запис видалено!")
                 st.rerun()
 
-# --- ВИВЕДЕННЯ ІНФОРМАЦІЇ ---
+        if st.button("🗑️ Очистити весь день повністю", use_container_width=True):
+            df_logs_check = df_logs_check[df_logs_check['Дата'].astype(str) != date_str]
+            df_logs_check.to_excel(log_file, index=False)
+            
+            df_main = pd.read_excel(EXCEL_FILE)
+            df_main = df_main[df_main['Дата'].astype(str) != date_str]
+            df_main.to_excel(EXCEL_FILE, index=False)
+            st.success("День повністю очищено!")
+            st.rerun()
+
+# --- ВІДОБРАЖЕННЯ ІНФОРМАЦІЇ ---
 if os.path.exists(EXCEL_FILE):
     df_current = pd.read_excel(EXCEL_FILE)
     if not df_current.empty and date_str in df_current['Дата'].astype(str).values:
@@ -242,6 +285,6 @@ if os.path.exists(EXCEL_FILE):
         
         st.markdown(f"""
             <div class="food-box">
-                <b>📝 Що ти їв сьогодні / Лог:</b><br>{latest['Раціон']}
+                <b>📝 Лог за сьогодні:</b><br>{latest['Раціон']}
             </div>
         """, unsafe_allow_html=True)
