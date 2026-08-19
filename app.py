@@ -38,7 +38,16 @@ st.markdown("""
         line-height: 1.5;
         margin-top: 10px;
     }
-    /* Стиль для великого анімаційного пончика-індикатора */
+    .macros-box {
+        background-color: rgba(20, 20, 20, 0.92);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 10px 14px;
+        color: #ddd;
+        font-size: 14px;
+        text-align: center;
+        margin-top: 10px;
+    }
     .donut-container {
         display: flex;
         justify-content: center;
@@ -103,6 +112,9 @@ if submit_btn and user_input:
             idx = df[df['Дата'].astype(str) == date_str].index[0]
             df.loc[idx, 'Спожито (ккал)'] += float(data.get('total_consumed_kcal', 0))
             df.loc[idx, 'Спалено (ккал)'] += float(data.get('kcal_burned', 0))
+            df.loc[idx, 'Білки (г)'] += float(data.get('total_protein', 0))
+            df.loc[idx, 'Жири (г)'] += float(data.get('total_fat', 0))
+            df.loc[idx, 'Вуглеводи (г)'] += float(data.get('total_carbs', 0))
             df.loc[idx, 'Баланс (ккал)'] = df.loc[idx, 'Спожито (ккал)'] - df.loc[idx, 'Спалено (ккал)']
         else:
             new_row = pd.DataFrame({'Дата': [date_str], 'День тижня': [DAYS_UA.get(now.strftime('%A'))], 'Раціон': [data.get('food_description')], 'Кроки': [data.get('steps')], 'Спалено (ккал)': [data.get('kcal_burned')], 'Спожито (ккал)': [data.get('total_consumed_kcal')], 'Білки (г)': [data.get('total_protein')], 'Жири (г)': [data.get('total_fat')], 'Вуглеводи (г)': [data.get('total_carbs')], 'Баланс (ккал)': [data.get('total_consumed_kcal', 0) - data.get('kcal_burned', 0)]})
@@ -113,7 +125,7 @@ if submit_btn and user_input:
     except Exception as e:
         st.error(f'Помилка: {e}')
 
-# --- ВЕЛИКИЙ CSS ПОНЧИК ТА ВИПРАВЛЕНИЙ ТЕКСТ ЇДИ ---
+# --- ВІДОБРАЖЕННЯ ІНФОРМАЦІЇ ---
 if os.path.exists(EXCEL_FILE):
     df_current = pd.read_excel(EXCEL_FILE)
     if not df_current.empty:
@@ -124,11 +136,10 @@ if os.path.exists(EXCEL_FILE):
         consumed = float(latest['Спожито (ккал)'])
         target = BASE_CALORIE_TARGET
         
-        # Розрахунок відсотків та градусів для CSS-пончика
         percent = min(100, int((consumed / target) * 100)) if target > 0 else 0
         deg = int((percent / 100) * 360)
 
-        # Виводимо великий пончик через стилі
+        # Великий пончик
         st.markdown(f"""
             <div class="donut-container">
                 <div class="donut-ring" style="--deg: {deg}deg;">
@@ -145,6 +156,18 @@ if os.path.exists(EXCEL_FILE):
         c1.metric("🥗 Їжа", f"{int(consumed)} ккал")
         c2.metric("🔥 Спорт", f"{int(latest['Спалено (ккал)'])} ккал")
         
+        # БЖУ блок
+        protein = round(float(latest.get('Білки (г)', 0)), 1)
+        fat = round(float(latest.get('Жири (г)', 0)), 1)
+        carbs = round(float(latest.get('Вуглеводи (г)', 0)), 1)
+        
+        st.markdown(f"""
+            <div class="macros-box">
+                🥩 <b>Білки:</b> {protein}г &nbsp;&nbsp;|&nbsp;&nbsp; 🥑 <b>Жири:</b> {fat}г &nbsp;&nbsp;|&nbsp;&nbsp; 🍞 <b>Вуглеводи:</b> {carbs}г
+            </div>
+        """, unsafe_allow_html=True)
+
+        # Блок раціону
         st.markdown(f"""
             <div class="food-box">
                 <b>🍱 Раціон:</b><br>{latest['Раціон']}
