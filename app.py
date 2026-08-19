@@ -29,19 +29,6 @@ st.markdown(
     .donut-hole {{ width: 125px; height: 125px; background-color: #141414; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white; }}
     .macros-row {{ display: flex; justify-content: space-around; width: 100%; max-width: 340px; margin-top: 12px; font-size: 12px; background-color: rgba(20, 20, 20, 0.9); padding: 8px 6px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); }}
     .stButton button {{ width: 100%; border-radius: 10px; }}
-    
-    /* ВИПРАВЛЕННЯ ДЛЯ КНОПОК НА МОБІЛЬНИХ */
-    @media (max-width: 768px) {{
-        div[data-testid="stHorizontalBlock"] {{
-            gap: 6px !important;
-        }}
-        div[data-testid="stHorizontalBlock"] > div[data-testid="column"] {{
-            width: 50% !important;
-            flex: 1 1 50% !important;
-            min-width: 0 !important;
-            padding: 0 !important;
-        }}
-    }}
 
     .log-item {{
         display: flex;
@@ -167,12 +154,10 @@ selected_date = st.selectbox("📅 Вибрати день для перегля
 if st.button("⚙️ Налаштування", use_container_width=True): 
     st.session_state["edit_mode"] = not st.session_state["edit_mode"]
 
-col1, col2 = st.columns(2)
-with col1:
-    btn_del = st.button("🗑️ Видалити", use_container_width=True)
-with col2:
-    has_trash = os.path.exists(TRASH_FILE)
-    btn_back = st.button("🔄 Повернути", disabled=not has_trash, use_container_width=True)
+# Кнопки «Видалити» та «Повернути» тепер на повну ширину одна під одною
+btn_del = st.button("🗑️ Видалити", use_container_width=True)
+has_trash = os.path.exists(TRASH_FILE)
+btn_back = st.button("🔄 Повернути", disabled=not has_trash, use_container_width=True)
 
 if btn_del:
     if not df_data.empty:
