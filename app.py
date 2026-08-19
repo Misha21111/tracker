@@ -105,11 +105,25 @@ if submit_btn and user_input:
           ]
       )
 
+    # Приведення числових колонок до типу float для уникнення помилок dtypes
+    numeric_cols = [
+        'Кроки',
+        'Спалено (ккал)',
+        'Спожито (ккал)',
+        'Білки (г)',
+        'Жири (г)',
+        'Вуглеводи (г)',
+        'Баланс (ккал)',
+    ]
+    for col in numeric_cols:
+      if col in df.columns:
+        df[col] = df[col].astype(float)
+
     if date_str in df['Дата'].astype(str).values:
       idx = df[df['Дата'].astype(str) == date_str].index[0]
 
       if input_steps is not None:
-        df.loc[idx, 'Кроки'] = int(input_steps)
+        df.loc[idx, 'Кроки'] = float(input_steps)
       if input_kcal_burned is not None:
         df.loc[idx, 'Спалено (ккал)'] = float(input_kcal_burned)
 
@@ -126,9 +140,11 @@ if submit_btn and user_input:
       new_row = pd.DataFrame({
           'Дата': [date_str],
           'День тижня': [day_name_ua],
-          'Кроки': [input_steps if input_steps is not None else 0],
+          'Кроки': [float(input_steps) if input_steps is not None else 0.0],
           'Спалено (ккал)': [
-              input_kcal_burned if input_kcal_burned is not None else 0.0
+              float(input_kcal_burned)
+              if input_kcal_burned is not None
+              else 0.0
           ],
           'Спожито (ккал)': [round(add_kcal, 1)],
           'Білки (г)': [round(add_p, 1)],
@@ -138,7 +154,7 @@ if submit_btn and user_input:
               round(
                   add_kcal
                   - (
-                      input_kcal_burned
+                      float(input_kcal_burned)
                       if input_kcal_burned is not None
                       else 0.0
                   ),
