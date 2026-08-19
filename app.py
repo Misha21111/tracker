@@ -22,9 +22,6 @@ st.markdown(
     .donut-ring {{ width: 190px; height: 190px; border-radius: 50%; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 15px rgba(0,0,0,0.8); }}
     .donut-hole {{ width: 125px; height: 125px; background-color: #141414; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white; }}
     .macros-row {{ display: flex; justify-content: space-around; width: 100%; max-width: 340px; margin-top: 12px; font-size: 12px; background-color: rgba(20, 20, 20, 0.9); padding: 8px 6px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); }}
-    
-    .btn-row {{ display: flex; gap: 10px; width: 100%; margin-bottom: 10px; }}
-    .btn-row > div {{ flex: 1; }}
     .stButton button {{ width: 100%; border-radius: 10px; }}
     </style>
     """, unsafe_allow_html=True,
@@ -80,7 +77,7 @@ now = datetime.now()
 today_str = now.strftime("%Y-%m-%d")
 time_str = now.strftime("%H:%M")
 
-# 1. Поле введення їжі на самому верху
+# 1. Поле введення їжі — НАЙПЕРШЕ
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
@@ -113,7 +110,7 @@ if submit_btn and user_input:
         st.rerun()
     except Exception as e: st.error(f"Помилка: {e}")
 
-# 2. Вибір дня нижче
+# 2. Решта елементів нижче
 available_dates = [today_str]
 if not df_data.empty and "Дата" in df_data.columns:
     unique_dates = sorted(df_data["Дата"].astype(str).unique(), reverse=True)
@@ -123,11 +120,10 @@ if not df_data.empty and "Дата" in df_data.columns:
 
 selected_date = st.selectbox("📅 Вибрати день для перегляду:", available_dates)
 
-# 3. Кнопка Налаштування
 if st.button("⚙️ Налаштування", use_container_width=True): 
     st.session_state["edit_mode"] = not st.session_state["edit_mode"]
 
-# 4. Кнопки Видалити + Повернути в одному рядку
+# 3. Кнопки «Видалити останнє» та «Повернути» — чітко в один рядок
 col1, col2 = st.columns(2)
 with col1:
     if st.button("🗑️ Видалити останнє", use_container_width=True):
@@ -138,15 +134,14 @@ with col1:
             df_data.to_excel(EXCEL_FILE, index=False)
             st.rerun()
 with col2:
-    if os.path.exists(TRASH_FILE):
-        if st.button("🔄 Повернути", use_container_width=True):
+    has_trash = os.path.exists(TRASH_FILE)
+    if st.button("🔄 Повернути", disabled=not has_trash, use_container_width=True):
+        if has_trash:
             with open(TRASH_FILE, "r") as f: restored = json.load(f)
             df_data = pd.concat([df_data, pd.DataFrame(restored)], ignore_index=True)
             df_data.to_excel(EXCEL_FILE, index=False)
             os.remove(TRASH_FILE)
             st.rerun()
-    else:
-        st.button("🔄 Повернути", disabled=True, use_container_width=True)
 
 if st.session_state["edit_mode"]:
     with st.container(border=True):
@@ -170,10 +165,12 @@ if not day_df.empty:
     explicit_burned = day_df["Спалено"].sum()
     protein, fat, carbs = day_df["Білки"].sum(), day_df["Жири"].sum(), day_df["Вуглеводи"].sum()
     
+    bmr_total = user_settings.get("bmr_daily", 1850)
     if selected_date == today_str:
-        total_burned = explicit_burned + (user_settings.get("bmr_daily", 1850) / 24) * (now.hour + now.minute / 60)
+        hours_passed = now.hour + now.minute / 60
+        total_burned = explicit_burned + (bmr_total / 24) * hours_passed
     else:
-        total_burned = explicit_burned + (user_settings.get("bmr_daily", 1850))
+        total_burned = explicit_burned + bmr_total
 
     st.markdown(f"**📅 {selected_date} | Вага: ~{w_data.get('current_weight', 91.8):.1f} кг**")
     
