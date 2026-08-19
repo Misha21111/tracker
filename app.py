@@ -110,7 +110,6 @@ st.title("🏋️ Мій фітнес")
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     
-    # Кнопка для відкриття камери
     if st.button("📸 Сканувати камерою", use_container_width=True):
         st.session_state["use_camera"] = not st.session_state["use_camera"]
         
@@ -129,10 +128,10 @@ if submit_btn and (user_input or captured_image):
             image_bytes = captured_image.getvalue()
             image_part = types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
             prompt = "Проаналізуй страву на фото. Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs."
-            response = client.models.generate_content(model="gemini-1.5-flash", contents=[image_part, prompt], config=types.GenerateContentConfig(response_mime_type="application/json"))
+            response = client.models.generate_content(model="gemini-3.5-flash", contents=[image_part, prompt], config=types.GenerateContentConfig(response_mime_type="application/json"))
         else:
             prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
-            response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
+            response = client.models.generate_content(model="gemini-3.5-flash", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
             
         data = json.loads(response.text)
         
@@ -267,7 +266,7 @@ if not day_df.empty:
         st.session_state["show_advice"] = True
 
     if st.session_state["show_advice"]:
-        advice_resp = client.models.generate_content(model="gemini-1.5-flash", contents=f"Аналіз за {selected_date}: {consumed} ккал, {protein}г білків. Коротка порада.")
+        advice_resp = client.models.generate_content(model="gemini-3.5-flash", contents=f"Аналіз за {selected_date}: {consumed} ккал, {protein}г білків. Коротка порада.")
         st.markdown(f'<div class="advice-box"><b>💡 Порада:</b><br>{advice_resp.text}</div>', unsafe_allow_html=True)
     
     if st.button("⚠️ Очистити цей день", use_container_width=True):
