@@ -48,12 +48,12 @@ def save_settings(s):
     with open(SETTINGS_FILE, "w") as f: json.dump(s, f)
 
 def load_weight():
+    # Завантажуємо вагу з JSON, яка зберігає прогрес постійно
     if os.path.exists(WEIGHT_FILE):
         try:
             with open(WEIGHT_FILE, "r") as f: return json.load(f)
-        except:
-            pass
-    return {"start_weight": 89.0, "total_deficit": 0.0}
+        except: pass
+    return {"current_weight": 91.8} # Стартове значення
 
 def save_weight(w):
     with open(WEIGHT_FILE, "w") as f: json.dump(w, f)
@@ -80,11 +80,11 @@ if st.session_state["edit_mode"]:
         e_prot = st.number_input("Ціль білків (г)", value=int(user_settings["protein"]), step=5)
         e_fat = st.number_input("Ціль жирів (г)", value=int(user_settings["fat"]), step=5)
         e_carb = st.number_input("Ціль вуглеводів (г)", value=int(user_settings["carbs"]), step=5)
-        e_weight = st.number_input("Поточна вага (кг)", value=float(w_data["start_weight"]), step=0.1)
+        e_weight = st.number_input("Актуальна вага (кг)", value=float(w_data["current_weight"]), step=0.1)
         
         if st.button("💾 Зберегти зміни", type="primary", use_container_width=True):
             save_settings({"calories": e_cal, "protein": e_prot, "fat": e_fat, "carbs": e_carb, "bmr_daily": user_settings.get("bmr_daily", 1850)})
-            w_data["start_weight"] = e_weight
+            w_data["current_weight"] = e_weight
             save_weight(w_data)
             st.session_state["edit_mode"] = False
             st.rerun()
@@ -97,34 +97,27 @@ now = datetime.now()
 date_str, time_str = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
 
 if submit_btn and user_input:
-    prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON з полями: food_description (рядок), kcal_burned (число або 0), total_consumed_kcal (число або 0), total_protein (число або 0), total_fat (число або 0), total_carbs (число або 0).'
+    prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
     try:
         response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
         data = json.loads(response.text)
         
-        c_consumed = float(data.get("total_consumed_kcal") or 0)
-        c_burned = float(data.get("kcal_burned") or 0)
-        p_val = float(data.get("total_protein") or 0)
-        f_val = float(data.get("total_fat") or 0)
-        cb_val = float(data.get("total_carbs") or 0)
-        desc = data.get("food_description") or user_input
-        
         new_entry = pd.DataFrame([{
-            "Дата": date_str, "Час": time_str, "Опис": desc, 
-            "Тип": "Тренування" if c_burned > 0 else "Їжа", 
-            "Спожито": c_consumed, "Спалено": c_burned, 
-            "Білки": p_val, "Жири": f_val, "Вуглеводи": cb_val
+            "Дата": date_str, "Час": time_str, "Опис": data.get("food_description", user_input), 
+            "Тип": "Тренування" if float(data.get("kcal_burned", 0)) > 0 else "Їжа", 
+            "Спожито": float(data.get("total_consumed_kcal", 0)), 
+            "Спалено": float(data.get("kcal_burned", 0)), 
+            "Білки": float(data.get("total_protein", 0)), 
+            "Жири": float(data.get("total_fat", 0)), 
+            "Вуглеводи": float(data.get("total_carbs", 0))
         }])
         
         df_data = pd.concat([df_data, new_entry], ignore_index=True)
         df_data.to_excel(EXCEL_FILE, index=False)
-        st.session_state["show_advice"] = False
         st.rerun()
-    except Exception as e: 
-        st.error(f"Помилка: {e}")
+    except Exception as e: st.error(f"Помилка: {e}")
 
-# Кнопка видалення останнього запису працює стабільно
-if st.button("↩️ Видалити останній запис", use_container_width=True):
+if st.button("↩️ Видалити останній запис"):
     if not df_data.empty:
         df_data = df_data.iloc[:-1]
         df_data.to_excel(EXCEL_FILE, index=False)
@@ -135,43 +128,25 @@ today_df = df_data[df_data["Дата"].astype(str) == date_str] if not df_data.e
 if not today_df.empty:
     consumed = today_df["Спожито"].sum()
     explicit_burned = today_df["Спалено"].sum()
-    protein = today_df["Білки"].sum()
-    fat = today_df["Жири"].sum()
-    carbs = today_df["Вуглеводи"].sum()
+    protein, fat, carbs = today_df["Білки"].sum(), today_df["Жири"].sum(), today_df["Вуглеводи"].sum()
     
-    bmr_daily = user_settings.get("bmr_daily", 1850)
-    hours_passed = now.hour + (now.minute / 60)
-    total_burned = explicit_burned + (bmr_daily / 24) * hours_passed
+    total_burned = explicit_burned + (user_settings.get("bmr_daily", 1850) / 24) * (now.hour + now.minute / 60)
     
-    current_weight = w_data["start_weight"]
+    st.markdown(f"**📅 {date_str} | Вага: ~{w_data['current_weight']:.1f} кг**")
     
-    st.markdown(f"**📅 {date_str} | Вага: ~{current_weight:.2f} кг**")
-    
+    # Розрахунок прогресу (візуалізація)
     target_cal = user_settings["calories"]
-    target_prot = user_settings["protein"]
-    target_fat = user_settings["fat"]
-    target_carb = user_settings["carbs"]
-    
-    total_macros = protein + fat + carbs
-    if total_macros > 0:
-        p_deg = (protein / total_macros) * 360
-        f_deg = p_deg + (fat / total_macros) * 360
-        c_deg = 360
-    else:
-        p_deg, f_deg, c_deg = 120, 240, 360
-
     percent_target = min(100, int((consumed / target_cal) * 100)) if target_cal > 0 else 0
+    
     st.markdown(f"""
         <div class="donut-container">
-            <div class="donut-ring" style="background: conic-gradient(#36A2EB 0deg {p_deg}deg, #FFCE56 {p_deg}deg {f_deg}deg, #FF6384 {f_deg}deg {c_deg}deg);">
+            <div class="donut-ring" style="background: conic-gradient(#36A2EB 0deg {(protein/max(1,protein+fat+carbs))*360}deg, #FFCE56 0deg 360deg);">
                 <div class="donut-hole">
-                    <span style="font-size: 20px; font-weight: bold;">{int(consumed)}</span>
-                    <span style="font-size: 11px; color: #aaa;">із {target_cal} ккал</span>
-                    <span style="font-size: 12px; color: #4CAF50;"><b>{percent_target}%</b></span>
+                    <b>{int(consumed)}</b><br>із {target_cal} ккал<br><b>{percent_target}%</b>
                 </div>
             </div>
             <div class="macros-row">
-                <span>🥩 {protein:.0f}/{target_prot}г</span><span>🥑 {fat:.0f}/{target_fat}г</span><span>🍞 {carbs:.0f}/{target_carb}г</span>
+                <span>🥩 {protein:.0f}/{user_settings['protein']}г</span><span>🥑 {fat:.0f}/{user_settings['fat']}г</span><span>🍞 {carbs:.0f}/{user_settings['carbs']}г</span>
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -183,27 +158,14 @@ if not today_df.empty:
     log_lines = [f"• {row['Час']} {'💪' if row['Тип'] == 'Тренування' else '🍽️'} {row['Опис']} — <b>{int(row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито'])} ккал</b>" for _, row in today_df.iterrows()]
     st.markdown(f'<div class="food-box"><b>📝 Лог:</b><br>{"<br>".join(log_lines)}</div>', unsafe_allow_html=True)
     
-    if st.button("💡 Запитати пораду у Gemini", use_container_width=True):
+    if st.button("💡 Порада Gemini"):
         st.session_state["show_advice"] = True
 
     if st.session_state["show_advice"]:
-        advice_prompt = f"""Проаналізуй харчування за сьогодні для чоловіка, який худне:
-        - Спожито калорій: {consumed} із норми {target_cal} ккал
-        - Загалом спалено: {int(total_burned)} ккал
-        - Білки: {protein}г (ціль {target_prot}г)
-        - Жири: {fat}г (ціль {target_fat}г)
-        - Вуглеводи: {carbs}г (ціль {target_carb}г)
-        Дай коротку, чітку пораду українською мовою."""
-        try:
-            with st.spinner("Аналізую..."):
-                advice_resp = client.models.generate_content(model="gemini-3.5-flash-lite", contents=advice_prompt)
-                advice_text = advice_resp.text
-        except:
-            advice_text = "Не вдалося завантажити пораду."
-        st.markdown(f'<div class="advice-box"><b>💡 Порада тренера:</b><br>{advice_text}</div>', unsafe_allow_html=True)
+        advice_resp = client.models.generate_content(model="gemini-3.5-flash-lite", contents=f"Аналіз: {consumed} ккал, {protein}г білків. Коротка порада.")
+        st.markdown(f'<div class="advice-box"><b>💡 Порада:</b><br>{advice_resp.text}</div>', unsafe_allow_html=True)
     
-    if st.button("⚠️ Очистити сьогодні", type="primary", use_container_width=True):
+    if st.button("⚠️ Очистити день"):
         df_data = df_data[df_data["Дата"].astype(str) != date_str]
         df_data.to_excel(EXCEL_FILE, index=False)
-        st.session_state["show_advice"] = False
         st.rerun()
