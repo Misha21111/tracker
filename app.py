@@ -23,9 +23,9 @@ st.markdown(
     .donut-hole {{ width: 125px; height: 125px; background-color: #141414; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white; }}
     .macros-row {{ display: flex; justify-content: space-around; width: 100%; max-width: 340px; margin-top: 12px; font-size: 12px; background-color: rgba(20, 20, 20, 0.9); padding: 8px 6px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); }}
     
-    /* Стилі для однакових та рівних кнопок в один ряд */
-    .stButton button {{ width: 100%; border-radius: 10px; background-color: #1e1e1e; color: white; border: 1px solid rgba(255, 255, 255, 0.2); }}
-    .stButton button:hover {{ border-color: #36A2EB; background-color: #2b2b2b; color: white; }}
+    .btn-row {{ display: flex; gap: 10px; width: 100%; margin-bottom: 10px; }}
+    .btn-row > div {{ flex: 1; }}
+    .stButton button {{ width: 100%; border-radius: 10px; }}
     </style>
     """, unsafe_allow_html=True,
 )
@@ -33,6 +33,7 @@ st.markdown(
 EXCEL_FILE = "fitness_entries.xlsx"
 WEIGHT_FILE = "weight_data.json"
 SETTINGS_FILE = "user_settings.json"
+TRASH_FILE = "fitness_trash.json"
 
 if "show_advice" not in st.session_state: st.session_state["show_advice"] = False
 if "edit_mode" not in st.session_state: st.session_state["edit_mode"] = False
@@ -75,17 +76,84 @@ df_data = load_data()
 
 st.title("🏋️ Мій фітнес")
 
-# Рівні колонки без автоматичного перенесення на мобільних
-c_b1, c_b2 = st.columns(2)
-with c_b1:
+# 1. Поле введення їжі тепер найперше
+now = datetime.now()
+today_str = now.strftime("%Y-%m-%d")
+
+with st.container(border=True):
+    user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
+    submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
+
+time_str = now.strftime("%H:%M")
+
+if submit_btn and user_input:
+    prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON з ключами: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
+    try:
+        response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
+        data = json.loads(response.text)
+        
+        f_desc = data.get("food_description") or user_input
+        k_burned = float(data.get("kcal_burned") or 0)
+        c_consumed = float(data.get("total_consumed_kcal") or 0)
+        prot = float(data.get("total_protein") or 0)
+        fat_val = float(data.get("total_fat") or 0)
+        carb = float(data.get("total_carbs") or 0)
+        
+        new_entry = pd.DataFrame([{
+            "Дата": today_str, "Час": time_str, "Опис": f_desc, 
+            "Тип": "Тренування" if k_burned > 0 else "Їжа", 
+            "Спожито": c_consumed, 
+            "Спалено": k_burned, 
+            "Білки": prot, 
+            "Жири": fat_val, 
+            "Вуглеводи": carb
+        }])
+        
+        df_data = pd.concat([df_data, new_entry], ignore_index=True)
+        df_data.to_excel(EXCEL_FILE, index=False)
+        st.rerun()
+    except Exception as e: st.error(f"Помилка: {e}")
+
+# Вибір дня для перегляду та налаштування нижче
+available_dates = [today_str]
+if not df_data.empty and "Дата" in df_data.columns:
+    unique_dates = sorted(df_data["Дата"].astype(str).unique(), reverse=True)
+    for d in unique_dates:
+        if d not in available_dates:
+            available_dates.append(d)
+
+selected_date = st.selectbox("📅 Вибрати день для перегляду:", available_dates)
+
+# Кнопки "Налаштування" та "Видалити / Повернути"
+st.markdown('<div class="btn-row">', unsafe_allow_html=True)
+b_col1, b_col2 = st.columns(2)
+with b_col1:
     if st.button("⚙️ Налаштування", use_container_width=True): 
         st.session_state["edit_mode"] = not st.session_state["edit_mode"]
-with c_b2:
+with b_col2:
     if st.button("↩️ Видалити", use_container_width=True):
         if not df_data.empty:
+            last_row = df_data.iloc[-1:].to_dict(orient="records")
+            with open(TRASH_FILE, "w") as f:
+                json.dump(last_row, f)
             df_data = df_data.iloc[:-1]
             df_data.to_excel(EXCEL_FILE, index=False)
             st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Кнопка повернення останнього видаленого запису в одному блоці з видаленням (або поруч)
+if os.path.exists(TRASH_FILE):
+    if st.button("🔄 Повернути останнє", use_container_width=True):
+        try:
+            with open(TRASH_FILE, "r") as f:
+                restored_data = json.load(f)
+            restored_df = pd.DataFrame(restored_data)
+            df_data = pd.concat([df_data, restored_df], ignore_index=True)
+            df_data.to_excel(EXCEL_FILE, index=False)
+            os.remove(TRASH_FILE)
+            st.rerun()
+        except Exception as e:
+            st.error(f"Помилка відновлення: {e}")
 
 if st.session_state["edit_mode"]:
     with st.container(border=True):
@@ -101,45 +169,6 @@ if st.session_state["edit_mode"]:
             save_weight({"current_weight": e_weight})
             st.session_state["edit_mode"] = False
             st.rerun()
-
-now = datetime.now()
-today_str = now.strftime("%Y-%m-%d")
-
-available_dates = [today_str]
-if not df_data.empty and "Дата" in df_data.columns:
-    unique_dates = sorted(df_data["Дата"].astype(str).unique(), reverse=True)
-    for d in unique_dates:
-        if d not in available_dates:
-            available_dates.append(d)
-
-selected_date = st.selectbox("📅 Вибрати день для перегляду:", available_dates)
-
-with st.container(border=True):
-    user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
-    submit_btn = st.button("Записати в лог", type="primary", use_container_width=True)
-
-time_str = now.strftime("%H:%M")
-
-if submit_btn and user_input:
-    prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
-    try:
-        response = client.models.generate_content(model="gemini-3.5-flash-lite", contents=prompt, config=types.GenerateContentConfig(response_mime_type="application/json"))
-        data = json.loads(response.text)
-        
-        new_entry = pd.DataFrame([{
-            "Дата": selected_date, "Час": time_str, "Опис": data.get("food_description", user_input), 
-            "Тип": "Тренування" if float(data.get("kcal_burned", 0)) > 0 else "Їжа", 
-            "Спожито": float(data.get("total_consumed_kcal", 0)), 
-            "Спалено": float(data.get("kcal_burned", 0)), 
-            "Білки": float(data.get("total_protein", 0)), 
-            "Жири": float(data.get("total_fat", 0)), 
-            "Вуглеводи": float(data.get("total_carbs", 0))
-        }])
-        
-        df_data = pd.concat([df_data, new_entry], ignore_index=True)
-        df_data.to_excel(EXCEL_FILE, index=False)
-        st.rerun()
-    except Exception as e: st.error(f"Помилка: {e}")
 
 day_df = df_data[df_data["Дата"].astype(str) == selected_date] if not df_data.empty else pd.DataFrame()
 
