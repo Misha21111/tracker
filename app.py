@@ -90,18 +90,31 @@ st.markdown(
 
 EXCEL_FILE = "fitness_entries.xlsx"
 WEIGHT_FILE = "weight_data.json"
-TARGET_PROTEIN, TARGET_FAT, TARGET_CARBS, BASE_CALORIE_TARGET = 160, 70, 180, 1990
+SETTINGS_FILE = "user_settings.json"
 
 DAYS_UA = {
     "Monday": "Понеділок", "Tuesday": "Вівторок", "Wednesday": "Середа",
     "Thursday": "Четвер", "Friday": "П’ятниця", "Saturday": "Субота", "Sunday": "Неділя",
 }
 
-if "redo_stack" not in st.session_state: st.session_state["redo_stack"] = []
+if "show_advice" not in st.session_state: st.session_state["show_advice"] = False
 
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 if not api_key: st.error("⚠️ Не знайдено API ключ!"); st.stop()
 client = genai.Client(api_key=api_key)
+
+# Завантаження/Збереження налаштувань цілей
+def load_settings():
+    if os.path.exists(SETTINGS_FILE):
+        with open(SETTINGS_FILE, "r") as f:
+            return json.load(f)
+    return {"calories": 1990, "protein": 160, "fat": 70, "carbs": 180}
+
+def save_settings(s):
+    with open(SETTINGS_FILE, "w") as f:
+        json.dump(s, f)
+
+user_settings = load_settings()
 
 def load_weight():
     if os.path.exists(WEIGHT_FILE):
@@ -110,6 +123,30 @@ def load_weight():
     return {"start_weight": 89.0, "total_deficit": 0.0}
 
 w_data = load_weight()
+
+# Налаштування в боковій панелі (щоб змінювати цифри вручну)
+with st.sidebar:
+    st.header("⚙️ Налаштування цілей")
+    new_cal = st.number_input("Ціль калорій (ккал)", value=user_settings["calories"], step=10)
+    new_prot = st.number_input("Ціль білків (г)", value=user_settings["protein"], step=5)
+    new_fat = st.number_input("Ціль жирів (г)", value=user_settings["fat"], step=5)
+    new_carb = st.number_input("Ціль вуглеводів (г)", value=user_settings["carbs"], step=5)
+    
+    new_start_w = st.number_input("Стартова вага (кг)", value=w_data["start_weight"], step=0.1)
+    
+    if st.button("Зберегти налаштування", use_container_width=True):
+        user_settings = {"calories": new_cal, "protein": new_prot, "fat": new_fat, "carbs": new_carb}
+        save_settings(user_settings)
+        w_data["start_weight"] = new_start_w
+        with open(WEIGHT_FILE, "w") as f:
+            json.dump(w_data, f)
+        st.success("Збережено!")
+        st.rerun()
+
+TARGET_PROTEIN = user_settings["protein"]
+TARGET_FAT = user_settings["fat"]
+TARGET_CARBS = user_settings["carbs"]
+BASE_CALORIE_TARGET = user_settings["calories"]
 
 st.title("🏋️ Мій фітнес")
 
@@ -147,7 +184,6 @@ if submit_btn and user_input:
         df_data = pd.concat([df_data, new_entry], ignore_index=True)
         df_data.to_excel(EXCEL_FILE, index=False)
         
-        # Оновлення загального дефіциту та розрахунок ваги (7700 ккал = 1 кг)
         today_entries = df_data[df_data["Дата"].astype(str) == date_str]
         day_consumed = today_entries["Спожито"].sum()
         day_burned = today_entries["Спалено"].sum()
@@ -156,6 +192,7 @@ if submit_btn and user_input:
         with open(WEIGHT_FILE, "w") as f:
             json.dump(w_data, f)
             
+        st.session_state["show_advice"] = False
         st.rerun()
     except Exception as e: st.error(f"Помилка: {e}")
 
@@ -167,7 +204,7 @@ if not today_df.empty:
     
     st.markdown(f"**📅 {date_str} | Вага: ~{current_weight:.2f} кг**")
     
-    percent_target = min(100, int((consumed / BASE_CALORIE_TARGET) * 100))
+    percent_target = min(100, int((consumed / BASE_CALORIE_TARGET) * 100)) if BASE_CALORIE_TARGET > 0 else 0
     st.markdown(f"""
         <div class="donut-container">
             <div class="donut-ring" style="background: conic-gradient(#36A2EB 0deg 120deg, #FFCE56 120deg 240deg, #FF6384 240deg 360deg);">
@@ -190,25 +227,30 @@ if not today_df.empty:
     log_lines = [f"• {row['Час']} {'💪' if row['Тип'] == 'Тренування' else '🍽️'} {row['Опис']} — <b>{int(row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито'])} ккал</b>" for _, row in today_df.iterrows()]
     st.markdown(f'<div class="food-box"><b>📝 Лог:</b><br>{"<br>".join(log_lines)}</div>', unsafe_allow_html=True)
     
-    # Блок поради від Gemini
-    advice_prompt = f"""Проаналізуй харчування за сьогодні для чоловіка, який худне:
-    - Спожито калорій: {consumed} із норми {BASE_CALORIE_TARGET} ккал
-    - Спалено калорій: {burned} ккал
-    - Білки: {protein}г (ціль {TARGET_PROTEIN}г)
-    - Жири: {fat}г (ціль {TARGET_FAT}г)
-    - Вуглеводи: {carbs}г (ціль {TARGET_CARBS}г)
-    
-    Дай коротку, чітку пораду українською мовою: чого замало, а чого забагато в раціоні, і що варто скоригувати до кінця дня. Пиши лаконічно."""
-    
-    try:
-        advice_resp = client.models.generate_content(model="gemini-3.5-flash-lite", contents=advice_prompt)
-        advice_text = advice_resp.text
-    except:
-        advice_text = "Не вдалося завантажити пораду."
+    if st.button("💡 Запитати пораду у Gemini", use_container_width=True):
+        st.session_state["show_advice"] = True
 
-    st.markdown(f'<div class="advice-box"><b>💡 Порада тренера (Gemini):</b><br>{advice_text}</div>', unsafe_allow_html=True)
+    if st.session_state["show_advice"]:
+        advice_prompt = f"""Проаналізуй харчування за сьогодні для чоловіка, який худне:
+        - Спожито калорій: {consumed} із норми {BASE_CALORIE_TARGET} ккал
+        - Спалено калорій: {burned} ккал
+        - Білки: {protein}г (ціль {TARGET_PROTEIN}г)
+        - Жири: {fat}г (ціль {TARGET_FAT}г)
+        - Вуглеводи: {carbs}г (ціль {TARGET_CARBS}г)
+        
+        Дай коротку, чітку пораду українською мовою: чого замало, а чого забагато в раціоні, і що варто скоригувати до кінця дня. Пиши лаконічно."""
+        
+        try:
+            with st.spinner("Аналізую..."):
+                advice_resp = client.models.generate_content(model="gemini-3.5-flash-lite", contents=advice_prompt)
+                advice_text = advice_resp.text
+        except:
+            advice_text = "Не вдалося завантажити пораду."
+
+        st.markdown(f'<div class="advice-box"><b>💡 Порада тренера:</b><br>{advice_text}</div>', unsafe_allow_html=True)
     
     if st.button("⚠️ Очистити сьогодні", type="primary", use_container_width=True):
         df_data = df_data[df_data["Дата"].astype(str) != date_str]
         df_data.to_excel(EXCEL_FILE, index=False)
+        st.session_state["show_advice"] = False
         st.rerun()
