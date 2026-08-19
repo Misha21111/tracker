@@ -5,24 +5,24 @@ import streamlit as st
 from google import genai
 from google.genai import types
 
-# --- НАЛАШТУВАННЯ СТИЛЮ (ЧІТКИЙ ФОН БЕЗ РОЗТЯГУВАННЯ) ---
+# --- НАЛАШТУВАННЯ СТИЛЮ (ЧІТКИЙ ФОН) ---
 st.set_page_config(page_title='Мій Фітнес', layout='centered')
 
 st.markdown("""
     <style>
     .stApp {
-        background-image: linear-gradient(rgba(14, 17, 23, 0.75), rgba(14, 17, 23, 0.75)), url("https://i.ibb.co/jXZnnG5/IMG-20260819-144933.jpg");
+        background-image: linear-gradient(rgba(10, 10, 10, 0.8), rgba(10, 10, 10, 0.8)), url("https://i.ibb.co/jXZnnG5/IMG-20260819-144933.jpg");
         background-repeat: no-repeat;
         background-position: center center;
         background-attachment: fixed;
         background-size: cover;
-        background-color: #0e1117;
+        background-color: #000000;
     }
-    /* Компактні блоки з чітким читабельним текстом */
+    /* Компактні блоки з читабельним текстом */
     div[data-testid="stMetric"], div[data-testid="stMarkdownContainer"], div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: rgba(20, 20, 20, 0.9);
-        border-radius: 10px;
-        padding: 6px 10px;
+        background-color: rgba(20, 20, 20, 0.92);
+        border-radius: 12px;
+        padding: 8px 12px;
         color: white;
     }
     .block-container {
@@ -43,12 +43,8 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-# Шапка з пончиком та заголовком
-col_img, col_txt = st.columns([1, 4])
-with col_img:
-    st.image("https://i.ibb.co/609Jt7L/donut.png", width=60)
-with col_txt:
-    st.title("Фітнес-трекер")
+# Красивий заголовок з емодзі пончика замість зламаної картинки
+st.title("🍩 Фітнес-трекер")
 
 with st.container(border=True):
     user_input = st.text_input('📥 Введіть дані:', placeholder="Наприклад: з'їв 30г хліба, спалено 300 ккал")
