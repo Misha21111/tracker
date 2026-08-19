@@ -109,8 +109,6 @@ st.title("🏋️ Мій фітнес")
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     
-    # Використовуємо завантажувач файлів із параметром capture="environment", 
-    # який на мобільних пристроях примусово відкриває саме ЗАДНЮ камеру (основну камеру).
     captured_image = st.file_uploader(
         "📸 Зробити фото задньою камерою або завантажити:", 
         type=["jpg", "jpeg", "png"],
@@ -222,7 +220,7 @@ if not day_df.empty:
 
     st.markdown(f"**📅 {selected_date} | Вага: ~{w_data.get('current_weight', 89.0):.1f} кг**")
     
-    target_cal = user_settings["calories"]`
+    target_cal = user_settings["calories"]
     percent_target = min(100, int((consumed / target_cal) * 100)) if target_cal > 0 else 0
     
     total_macros = protein + fat + carbs
