@@ -2,31 +2,29 @@ import json
 import os
 import pandas as pd
 import streamlit as st
-import plotly.express as px
 from google import genai
 from google.genai import types
 
-# --- НАЛАШТУВАННЯ СТИЛЮ ТА КОМПАКТНОСТІ ---
+# --- НАЛАШТУВАННЯ СТИЛЮ (ЧІТКИЙ ФОН БЕЗ РОЗТЯГУВАННЯ) ---
 st.set_page_config(page_title='Мій Фітнес', layout='centered')
 
 st.markdown("""
     <style>
     .stApp {
-        background: url("https://i.ibb.co/jXZnnG5/IMG-20260819-144933.jpg");
+        background-image: linear-gradient(rgba(14, 17, 23, 0.75), rgba(14, 17, 23, 0.75)), url("https://i.ibb.co/jXZnnG5/IMG-20260819-144933.jpg");
         background-repeat: no-repeat;
-        background-position: center top;
+        background-position: center center;
         background-attachment: fixed;
         background-size: cover;
         background-color: #0e1117;
     }
-    /* Компактні напівпрозорі блоки, щоб усе влізло на екран */
+    /* Компактні блоки з чітким читабельним текстом */
     div[data-testid="stMetric"], div[data-testid="stMarkdownContainer"], div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: rgba(15, 15, 15, 0.88);
+        background-color: rgba(20, 20, 20, 0.9);
         border-radius: 10px;
         padding: 6px 10px;
         color: white;
     }
-    /* Зменшуємо зайві відступи між елементами */
     .block-container {
         padding-top: 1rem;
         padding-bottom: 1rem;
@@ -45,7 +43,12 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-st.title("🏋️ Мій фітнес")
+# Шапка з пончиком та заголовком
+col_img, col_txt = st.columns([1, 4])
+with col_img:
+    st.image("https://i.ibb.co/609Jt7L/donut.png", width=60)
+with col_txt:
+    st.title("Фітнес-трекер")
 
 with st.container(border=True):
     user_input = st.text_input('📥 Введіть дані:', placeholder="Наприклад: з'їв 30г хліба, спалено 300 ккал")
@@ -85,33 +88,9 @@ if os.path.exists(EXCEL_FILE):
         
         st.markdown(f"**📅 {latest['Дата']} ({latest['День тижня']})**")
 
-        # Компактна кругова діаграма (пончик)
-        chart_data = pd.DataFrame({
-            'Показник': ['Спожито', 'Спалено'],
-            'Ккал': [float(latest['Спожито (ккал)']), float(latest['Спалено (ккал)'])]
-        })
-        
-        fig = px.pie(
-            chart_data, 
-            values='Ккал', 
-            names='Показник', 
-            hole=0.65,
-            color='Показник',
-            color_discrete_map={'Спожито': '#FF5252', 'Спалено': '#4CAF50'}
-        )
-        fig.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font_color='white',
-            margin=dict(t=0, b=0, l=0, r=0),
-            height=180,  # Зменшено висоту, щоб не розтягувалося
-            showlegend=False
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
         # Метрики поруч
         c1, c2 = st.columns(2)
-        c1.metric("🥗 Їжа", f"{int(latest['Спожито (ккал)'])}")
-        c2.metric("🔥 Спорт", f"{int(latest['Спалено (ккал)'])}")
+        c1.metric("🥗 Їжа", f"{int(latest['Спожито (ккал)'])} ккал")
+        c2.metric("🔥 Спорт", f"{int(latest['Спалено (ккал)'])} ккал")
         
         st.info(f"🍱 {latest['Раціон']}")
