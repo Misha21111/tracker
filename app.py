@@ -90,12 +90,24 @@ if st.session_state["edit_mode"]:
             st.session_state["edit_mode"] = False
             st.rerun()
 
+# Вибір дати для перегляду (сьогодні або минулі дні)
+now = datetime.now()
+today_str = now.strftime("%Y-%m-%d")
+
+available_dates = [today_str]
+if not df_data.empty and "Дата" in df_data.columns:
+    unique_dates = sorted(df_data["Дата"].astype(str).unique(), reverse=True)
+    for d in unique_dates:
+        if d not in available_dates:
+            available_dates.append(d)
+
+selected_date = st.selectbox("📅 Вибрати день для перегляду:", available_dates)
+
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     submit_btn = st.button("Записати", type="primary", use_container_width=True)
 
-now = datetime.now()
-date_str, time_str = now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
+time_str = now.strftime("%H:%M")
 
 if submit_btn and user_input:
     prompt = f'Аналізуй: "{user_input}". Поверни суворо JSON: food_description, kcal_burned, total_consumed_kcal, total_protein, total_fat, total_carbs.'
@@ -104,7 +116,7 @@ if submit_btn and user_input:
         data = json.loads(response.text)
         
         new_entry = pd.DataFrame([{
-            "Дата": date_str, "Час": time_str, "Опис": data.get("food_description", user_input), 
+            "Дата": selected_date, "Час": time_str, "Опис": data.get("food_description", user_input), 
             "Тип": "Тренування" if float(data.get("kcal_burned", 0)) > 0 else "Їжа", 
             "Спожито": float(data.get("total_consumed_kcal", 0)), 
             "Спалено": float(data.get("kcal_burned", 0)), 
@@ -124,15 +136,20 @@ if st.button("↩️ Видалити останній запис"):
         df_data.to_excel(EXCEL_FILE, index=False)
         st.rerun()
 
-today_df = df_data[df_data["Дата"].astype(str) == date_str] if not df_data.empty else pd.DataFrame()
+day_df = df_data[df_data["Дата"].astype(str) == selected_date] if not df_data.empty else pd.DataFrame()
 
-if not today_df.empty:
-    consumed = today_df["Спожито"].sum()
-    explicit_burned = today_df["Спалено"].sum()
-    protein, fat, carbs = today_df["Білки"].sum(), today_df["Жири"].sum(), today_df["Вуглеводи"].sum()
-    total_burned = explicit_burned + (user_settings.get("bmr_daily", 1850) / 24) * (now.hour + now.minute / 60)
+if not day_df.empty:
+    consumed = day_df["Спожито"].sum()
+    explicit_burned = day_df["Спалено"].sum()
+    protein, fat, carbs = day_df["Білки"].sum(), day_df["Жири"].sum(), day_df["Вуглеводи"].sum()
     
-    st.markdown(f"**📅 {date_str} | Вага: ~{w_data.get('current_weight', 91.8):.1f} кг**")
+    # Якщо дивимось сьогодні — рахуємо спалені калорії з урахуванням часу, якщо минулий день — беремо суму з логу
+    if selected_date == today_str:
+        total_burned = explicit_burned + (user_settings.get("bmr_daily", 1850) / 24) * (now.hour + now.minute / 60)
+    else:
+        total_burned = explicit_burned + (user_settings.get("bmr_daily", 1850)) # повний день для минулих
+
+    st.markdown(f"**📅 {selected_date} | Вага: ~{w_data.get('current_weight', 91.8):.1f} кг**")
     
     target_cal = user_settings["calories"]
     percent_target = min(100, int((consumed / target_cal) * 100)) if target_cal > 0 else 0
@@ -164,17 +181,19 @@ if not today_df.empty:
     c1.metric("🍽️ З'їв", f"{int(consumed)} ккал")
     c2.metric("🔥 Спалено", f"{int(total_burned)} ккал")
     
-    log_lines = [f"• {row['Час']} {'💪' if row['Тип'] == 'Тренування' else '🍽️'} {row['Опис']} — <b>{int(row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито'])} ккал</b>" for _, row in today_df.iterrows()]
+    log_lines = [f"• {row['Час']} {'💪' if row['Тип'] == 'Тренування' else '🍽️'} {row['Опис']} — <b>{int(row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито'])} ккал</b>" for _, row in day_df.iterrows()]
     st.markdown(f'<div class="food-box"><b>📝 Лог:</b><br>{"<br>".join(log_lines)}</div>', unsafe_allow_html=True)
     
     if st.button("💡 Порада Gemini"):
         st.session_state["show_advice"] = True
 
     if st.session_state["show_advice"]:
-        advice_resp = client.models.generate_content(model="gemini-3.5-flash-lite", contents=f"Аналіз: {consumed} ккал, {protein}г білків. Коротка порада.")
+        advice_resp = client.models.generate_content(model="gemini-3.5-flash-lite", contents=f"Аналіз за {selected_date}: {consumed} ккал, {protein}г білків. Коротка порада.")
         st.markdown(f'<div class="advice-box"><b>💡 Порада:</b><br>{advice_resp.text}</div>', unsafe_allow_html=True)
     
-    if st.button("⚠️ Очистити день"):
-        df_data = df_data[df_data["Дата"].astype(str) != date_str]
+    if st.button("⚠️ Очистити цей день"):
+        df_data = df_data[df_data["Дата"].astype(str) != selected_date]
         df_data.to_excel(EXCEL_FILE, index=False)
         st.rerun()
+else:
+    st.info(f"За цей день ({selected_date}) ще немає записів.")
