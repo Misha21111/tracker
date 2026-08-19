@@ -69,18 +69,26 @@ st.markdown("""
     .macros-row {
         display: flex;
         justify-content: space-around;
-        width: 190px;
-        margin-top: 10px;
-        font-size: 13px;
+        width: 100%;
+        max-width: 340px;
+        margin-top: 12px;
+        font-size: 12px;
         background-color: rgba(20, 20, 20, 0.95);
-        padding: 6px 10px;
-        border-radius: 8px;
+        padding: 8px 6px;
+        border-radius: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
 
 EXCEL_FILE = 'fitness_entries.xlsx'
-BASE_CALORIE_TARGET = 2050
+
+# Оновлені норми під вагу 89 кг
+TARGET_PROTEIN = 160
+TARGET_FAT = 70
+TARGET_CARBS = 180
+# Розрахункова калорійність: (160*4) + (70*9) + (180*4) = 640 + 630 + 720 = 1990
+BASE_CALORIE_TARGET = 1990
+
 DAYS_UA = {'Monday': 'Понеділок', 'Tuesday': 'Вівторок', 'Wednesday': 'Середа', 'Thursday': 'Четвер', 'Friday': 'П’ятниця', 'Saturday': 'Субота', 'Sunday': 'Неділя'}
 
 api_key = st.secrets.get('GEMINI_API_KEY') or os.environ.get('GEMINI_API_KEY')
@@ -90,7 +98,7 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
-st.title("🏋️ Мій фітнес")
+st.title("🏋️ Мій фітнес (89 кг)")
 
 with st.container(border=True):
     user_input = st.text_input('📥 Введи, що зїв / тренування:', placeholder="Наприклад: з'їв 30г хліба, спалено 300 ккал або Калорії 161")
@@ -194,9 +202,9 @@ if not today_df.empty:
                 </div>
             </div>
             <div class="macros-row">
-                <span style="color:#36A2EB;">🥩 <b>{protein:.0f}г</b></span>
-                <span style="color:#FFCE56;">🥑 <b>{fat:.0f}г</b></span>
-                <span style="color:#FF6384;">🍞 <b>{carbs:.0f}г</b></span>
+                <span style="color:#36A2EB;">🥩 Білки: <b>{protein:.0f}/{TARGET_PROTEIN}г</b></span>
+                <span style="color:#FFCE56;">🥑 Жири: <b>{fat:.0f}/{TARGET_FAT}г</b></span>
+                <span style="color:#FF6384;">🍞 Вугл: <b>{carbs:.0f}/{TARGET_CARBS}г</b></span>
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -219,29 +227,19 @@ if not today_df.empty:
     """, unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown("### 🗑️ Видалення записів")
     
-    options = {}
-    for idx, row in today_df.iterrows():
-        icon = "💪" if row['Тип'] == 'Тренування' else "🍽️"
-        kcal_val = row['Спалено'] if row['Тип'] == 'Тренування' else row['Спожито']
-        label = f"[{row['Час']}] {icon} {row['Опис']} ({int(kcal_val)} ккал)"
-        options[label] = idx
+    col_undo, col_clear = st.columns(2)
+    with col_undo:
+        if st.button("↩️ Скасувати останню", type='secondary', use_container_width=True):
+            if not df_data.empty:
+                df_data = df_data.iloc[:-1]
+                df_data.to_excel(EXCEL_FILE, index=False)
+                st.success("Останню дію скасовано!")
+                st.rerun()
 
-    selected_entry = st.selectbox("Вибери запис для видалення:", list(options.keys()))
-
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        if st.button("🗑️ Видалити", type='secondary', use_container_width=True):
-            target_idx = options[selected_entry]
-            df_data = df_data.drop(target_idx)
-            df_data.to_excel(EXCEL_FILE, index=False)
-            st.success("Видалено!")
-            st.rerun()
-
-    with col_btn2:
+    with col_clear:
         if st.button("⚠️ Очистити день", type='primary', use_container_width=True):
             df_data = df_data[df_data['Дата'].astype(str) != date_str]
             df_data.to_excel(EXCEL_FILE, index=False)
-            st.success("Очищено!")
+            st.success("День очищено!")
             st.rerun()
