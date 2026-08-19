@@ -69,12 +69,12 @@ st.markdown("""
     .macros-row {
         display: flex;
         justify-content: space-around;
-        width: 100%;
-        margin-top: 12px;
-        font-size: 14px;
+        width: 190px;
+        margin-top: 10px;
+        font-size: 13px;
         background-color: rgba(20, 20, 20, 0.95);
-        padding: 10px;
-        border-radius: 10px;
+        padding: 6px 10px;
+        border-radius: 8px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -192,16 +192,16 @@ if not today_df.empty:
                 </div>
             </div>
             <div class="macros-row">
-                <span style="color:#36A2EB;">🥩 Білки: <b>{protein:.0f}г</b></span>
-                <span style="color:#FFCE56;">🥑 Жири: <b>{fat:.0f}г</b></span>
-                <span style="color:#FF6384;">🍞 Вугл: <b>{carbs:.0f}г</b></span>
+                <span style="color:#36A2EB;">🥩 <b>{protein:.0f}г</b></span>
+                <span style="color:#FFCE56;">🥑 <b>{fat:.0f}г</b></span>
+                <span style="color:#FF6384;">🍞 <b>{carbs:.0f}г</b></span>
             </div>
         </div>
     """, unsafe_allow_html=True)
 
     c1, c2 = st.columns(2)
     c1.metric("🍽️ З'їв за день", f"{int(consumed)} ккал")
-    c2.metric("💪 Спалено на тренуванні", f"{int(burned)} ккал")
+    c2.metric("💪 Спалено", f"{int(burned)} ккал")
 
     log_lines = []
     for _, row in today_df.iterrows():
@@ -226,20 +226,20 @@ if not today_df.empty:
         label = f"[{row['Час']}] {icon} {row['Опис']} ({int(kcal_val)} ккал)"
         options[label] = idx
 
-    selected_entry = st.selectbox("Вибери конкретний запис, який хочеш стерти:", list(options.keys()))
+    selected_entry = st.selectbox("Вибери запис для видалення:", list(options.keys()))
 
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        if st.button("🗑️ Видалити вибраний запис", type='secondary', use_container_width=True):
+        if st.button("🗑️ Видалити", type='secondary', use_container_width=True):
             target_idx = options[selected_entry]
             df_data = df_data.drop(target_idx)
             df_data.to_excel(EXCEL_FILE, index=False)
-            st.success("Запис видалено!")
+            st.success("Видалено!")
             st.rerun()
 
     with col_btn2:
-        if st.button("⚠️ Очистити весь день", type='primary', use_container_width=True):
+        if st.button("⚠️ Очистити день", type='primary', use_container_width=True):
             df_data = df_data[df_data['Дата'].astype(str) != date_str]
             df_data.to_excel(EXCEL_FILE, index=False)
-            st.success("Весь день очищено!")
+            st.success("Очищено!")
             st.rerun()
