@@ -1,7 +1,6 @@
 import json
 import os
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 from google import genai
 from google.genai import types
@@ -38,6 +37,35 @@ st.markdown("""
         font-size: 16px;
         line-height: 1.5;
         margin-top: 10px;
+    }
+    /* Стиль для великого анімаційного пончика-індикатора */
+    .donut-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 20px 0;
+    }
+    .donut-ring {
+        width: 180px;
+        height: 180px;
+        border-radius: 50%;
+        background: conic-gradient(#ff5252 var(--deg), #4CAF50 0deg);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        box-shadow: 0 0 15px rgba(0,0,0,0.5);
+    }
+    .donut-hole {
+        width: 120px;
+        height: 120px;
+        background-color: #141414;
+        border-radius: 50%;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        color: white;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -85,7 +113,7 @@ if submit_btn and user_input:
     except Exception as e:
         st.error(f'Помилка: {e}')
 
-# --- СТАБІЛЬНИЙ І ВЕЛИКИЙ ПОНЧИК ---
+# --- ВЕЛИКИЙ CSS ПОНЧИК ТА ВИПРАВЛЕНИЙ ТЕКСТ ЇДИ ---
 if os.path.exists(EXCEL_FILE):
     df_current = pd.read_excel(EXCEL_FILE)
     if not df_current.empty:
@@ -95,26 +123,23 @@ if os.path.exists(EXCEL_FILE):
 
         consumed = float(latest['Спожито (ккал)'])
         target = BASE_CALORIE_TARGET
-        remaining = max(0, target - consumed)
+        
+        # Розрахунок відсотків та градусів для CSS-пончика
+        percent = min(100, int((consumed / target) * 100)) if target > 0 else 0
+        deg = int((percent / 100) * 360)
 
-        fig = go.Figure(data=[go.Pie(
-            labels=['Спожито', 'Залишок'],
-            values=[consumed, remaining],
-            hole=0.7,
-            marker_colors=['#ff5252', '#4CAF50'],
-            textinfo='label+percent',
-            hoverinfo='label+value'
-        )])
-
-        fig.update_layout(
-            showlegend=False,
-            margin=dict(t=10, b=10, l=10, r=10),
-            height=300,
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0,0)'
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
+        # Виводимо великий пончик через стилі
+        st.markdown(f"""
+            <div class="donut-container">
+                <div class="donut-ring" style="--deg: {deg}deg;">
+                    <div class="donut-hole">
+                        <span style="font-size: 22px; font-weight: bold;">{int(consumed)}</span>
+                        <span style="font-size: 11px; color: #aaa;">з {target} ккал</span>
+                        <span style="font-size: 13px; color: #ff5252; margin-top: 2px;"><b>{percent}%</b></span>
+                    </div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
 
         c1, c2 = st.columns(2)
         c1.metric("🥗 Їжа", f"{int(consumed)} ккал")
