@@ -6,6 +6,9 @@ from google import genai
 from google.genai import types
 
 EXCEL_FILE = 'fitness_tracker.xlsx'
+DAILY_CALORIE_TARGET = (
+    2050  # Цільова норма калорій на день для схуднення (при вазі 89 кг)
+)
 
 DAYS_UA = {
     'Monday': 'Понеділок',
@@ -105,7 +108,6 @@ if submit_btn and user_input:
           ]
       )
 
-    # Приведення числових колонок до типу float для уникнення помилок dtypes
     numeric_cols = [
         'Кроки',
         'Спалено (ккал)',
@@ -174,7 +176,44 @@ if submit_btn and user_input:
 if os.path.exists(EXCEL_FILE):
   df_current = pd.read_excel(EXCEL_FILE)
 
+  today_str = pd.Timestamp.today().strftime('%Y-%m-%d')
+  today_row = df_current[df_current['Дата'].astype(str) == today_str]
+
   st.divider()
+  st.subheader('🎯 Статус схуднення за сьогодні')
+
+  if not today_row.empty:
+    consumed = today_row.iloc[0]['Спожито (ккал)']
+    diff_from_target = consumed - DAILY_CALORIE_TARGET
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric('Спожито ккал', f'{consumed}')
+    col2.metric('Ціль для схуднення', f'{DAILY_CALORIE_TARGET} ккал')
+
+    if consumed <= DAILY_CALORIE_TARGET:
+      col3.metric(
+          'Статус',
+          '📉 У дефіциті',
+          delta=f'{diff_from_target} ккал',
+          delta_color='inverse',
+      )
+      st.success(
+          '🔥 Чудово! Ви в межах норми схуднення (дефіцит калорій дотримується).'
+      )
+    else:
+      col3.metric(
+          'Статус',
+          '📈 Перевищено норму',
+          delta=f'+{diff_from_target} ккал',
+          delta_color='normal',
+      )
+      st.warning(
+          '⚠️ Ви перевищили ціль для схуднення. Спробуйте вписатися в ліміт'
+          f' {DAILY_CALORIE_TARGET} ккал.'
+      )
+  else:
+    st.info('Сьогодні ще немає записів. Введіть щось вище, щоб побачити статус!')
+
   st.subheader('📅 Таблиця обліку')
   st.dataframe(df_current, use_container_width=True)
 
