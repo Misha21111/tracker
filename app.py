@@ -258,10 +258,11 @@ st.markdown(
     .status {{
         text-align: center;
         font-weight: 900;
-        font-size: 18px;
+        font-size: 17px;
         padding: 12px;
         border-radius: 16px;
         margin: 12px 0;
+        line-height: 1.4;
     }}
 
     .deficit {{
@@ -428,7 +429,7 @@ def calculate_day(df, date_str, settings, watch_burned=0):
     fat = float(food["Жири"].sum())
     carbs = float(food["Вуглеводи"].sum())
     
-    # Фільтруємо записи "годинник", щоб не було подвійного підрахунку з верхнім віджетом
+    # Тренування окремо від годинника
     exercise_df = day[(day["Тип"].astype(str) == "Тренування") & (~day["Опис"].str.contains("годинник", case=False, na=False))]
     exercise = float(exercise_df["Спалено"].sum())
     watch = float(watch_burned or 0)
@@ -587,22 +588,18 @@ watch_key = f"watch_{profile_prefix}_{selected_date}"
 if watch_key not in st.session_state:
     st.session_state[watch_key] = float(watch_by_date.get(selected_date, 0))
 
-watch_cols = st.columns([4, 1])
-with watch_cols[0]:
-    watch_value = st.number_input(
-        "Замінити спалені калорії з годинника (ккал)",
-        min_value=0.0,
-        value=float(st.session_state[watch_key]),
-        step=10.0,
-        key=f"watch_input_{profile_prefix}_{selected_date}"
-    )
+def on_watch_change():
+    val = float(st.session_state[watch_key])
+    watch_by_date[selected_date] = val
+    save_watch(watch_by_date)
 
-with watch_cols[1]:
-    if st.button("🔄", key=f"watch_apply_{profile_prefix}_{selected_date}", use_container_width=True):
-        st.session_state[watch_key] = float(watch_value)
-        watch_by_date[selected_date] = float(watch_value)
-        save_watch(watch_by_date)
-        st.rerun()
+st.number_input(
+    "Замінити спалені калорії з годинника (ккал)",
+    min_value=0.0,
+    step=10.0,
+    key=watch_key,
+    on_change=on_watch_change
+)
 
 
 # ============================================================
@@ -634,8 +631,12 @@ else:
 donut_html = f"""<div class="section"><div class="donut-wrap"><div class="donut" style="background:{gradient};"><div class="donut-hole"><div class="balance">{balance_label}</div><div class="kcal-main">{consumed:.0f}</div><div class="kcal-sub">з {target:.0f} ккал</div></div></div><div class="macros"><div class="macro p">🥩 Білки {protein:.0f}/{settings["protein"]} г</div><div class="macro f">🥑 Жири {fat:.0f}/{settings["fat"]} г</div><div class="macro c">🍞 Вуглеводи {carbs:.0f}/{settings["carbs"]} г</div></div></div></div>"""
 st.markdown(donut_html, unsafe_allow_html=True)
 
+bmr_val = today_bmr(settings, selected_date)
 st.markdown(
-    f'<div class="status {balance_class}">Загальний баланс за день: {abs(balance):.0f} ккал ({("Дефіцит" if balance >= 0 else "Профіцит")})</div>',
+    f'<div class="status {balance_class}">'
+    f'Загальний баланс за день: {abs(balance):.0f} ккал ({("Дефіцит" if balance >= 0 else "Профіцит")})<br>'
+    f'<small style="font-size: 12px; opacity: 0.85;">🔥 Спалено всього: {burned:.0f} ккал (BMR: {bmr_val:.0f} + Годинник: {watch:.0f} + Тренування: {exercise:.0f})</small>'
+    f'</div>',
     unsafe_allow_html=True
 )
 
@@ -675,14 +676,21 @@ if st.session_state["edit_mode"]:
 # ============================================================
 
 st.markdown(f"### 📝 Влог за {selected_date}")
+
+# Якщо є калорії з годинника, відображаємо картку годинника першою
+if watch_now > 0:
+    st.markdown(
+        f'<div class="log-card"><div class="log-head"><div class="log-title">⌚ Калорії з годинника</div><div class="log-kcal">+{watch_now:.0f} ккал</div></div></div>',
+        unsafe_allow_html=True
+    )
+
 day_df = df[df["Дата"].astype(str) == str(selected_date)].copy()
 
-# Прибираємо порожні записи, записи з 0 ккал та записи про годинник із загального влогу
 if not day_df.empty:
     day_df = day_df[(day_df["Спожито"] > 0) | (day_df["Спалено"] > 0)]
     day_df = day_df[~day_df["Опис"].str.contains("годинник", case=False, na=False)]
 
-if day_df.empty:
+if day_df.empty and watch_now <= 0:
     st.info("За цей день інформативних записів немає.")
 else:
     for idx, row in day_df.iloc[::-1].iterrows():
