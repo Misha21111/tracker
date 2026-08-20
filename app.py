@@ -31,12 +31,15 @@ st.markdown(
     .stApp {{ background-image: linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.85)), url("{IMAGE_URL}"); background-size: cover; background-position: center; background-attachment: fixed; }}
     #MainMenu, footer, header {{visibility: hidden;}}
     
-    /* Жорстке обмеження ширини кнопок, щоб вони не розтягувались */
+    /* ФІКС КНОПОК: робимо обгортку та саму кнопку компактними */
+    div.stButton {{
+        display: inline-block !important;
+        width: auto !important;
+    }}
     div.stButton > button {{
         width: auto !important;
-        min-width: 120px;
-        display: inline-block;
-        margin: 0 auto;
+        display: inline-block !important;
+        padding: 0.35rem 1rem !important;
     }}
     
     div[data-testid="stMetric"], div[data-testid="stMarkdownContainer"], div[data-testid="stVerticalBlockBorderWrapper"] {{ background-color: rgba(20, 20, 20, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 10px 14px; color: white; }}
