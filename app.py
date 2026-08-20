@@ -13,6 +13,10 @@ except ImportError:
     LOCAL_TZ = timezone(timedelta(hours=2))
 
 
+# ============================================================
+# НАЛАШТУВАННЯ STREAMLIT
+# ============================================================
+
 st.set_page_config(
     page_title="Мій Фітнес",
     layout="centered"
@@ -37,6 +41,8 @@ profile_prefix = (
 EXCEL_FILE = f"fitness_entries_{profile_prefix}.xlsx"
 WEIGHT_FILE = f"weight_data_{profile_prefix}.json"
 SETTINGS_FILE = f"user_settings_{profile_prefix}.json"
+
+# Файл тепер використовується як історія Undo до 10 дій
 TRASH_FILE = f"fitness_trash_{profile_prefix}.json"
 
 IMAGE_URL = (
@@ -53,6 +59,7 @@ IMAGE_URL = (
 st.markdown(
     f"""
     <style>
+
     .stApp {{
         background-image:
         linear-gradient(
@@ -65,7 +72,9 @@ st.markdown(
         background-attachment: fixed;
     }}
 
-    #MainMenu, footer, header {{
+    #MainMenu,
+    footer,
+    header {{
         visibility: hidden;
     }}
 
@@ -163,19 +172,99 @@ st.markdown(
         color: #36A2EB;
     }}
 
-    /* ОДНАКОВА ВИСОТА ВСІХ КНОПОК */
+    /* ========================================================
+       КНОПКИ
+       ======================================================== */
+
     div.stButton > button {{
         min-height: 46px !important;
         height: 46px !important;
-        border-radius: 10px !important;
-        white-space: normal !important;
-        line-height: 1.2 !important;
+        width: 100% !important;
+        border-radius: 12px !important;
+
+        border: 1px solid rgba(255,255,255,0.14) !important;
+
+        background:
+            linear-gradient(
+                180deg,
+                rgba(55,55,55,0.95),
+                rgba(30,30,30,0.95)
+            ) !important;
+
+        color: #ffffff !important;
+
+        font-weight: 600 !important;
+
+        box-shadow:
+            0 3px 8px rgba(0,0,0,0.30) !important;
+
+        transition:
+            transform 0.10s ease,
+            filter 0.10s ease,
+            box-shadow 0.10s ease,
+            background 0.10s ease !important;
+    }}
+
+    div.stButton > button:hover {{
+        filter: brightness(1.18) !important;
+
+        box-shadow:
+            0 5px 12px rgba(0,0,0,0.40) !important;
+
+        border-color:
+            rgba(255,255,255,0.28) !important;
+    }}
+
+    div.stButton > button:active {{
+        transform: scale(0.965) translateY(2px) !important;
+
+        filter: brightness(0.72) !important;
+
+        box-shadow:
+            inset 0 3px 7px rgba(0,0,0,0.55) !important;
     }}
 
     div.stButton > button p {{
         margin: 0 !important;
         line-height: 1.2 !important;
     }}
+
+    /* Primary */
+    div.stButton > button[kind="primary"] {{
+        background:
+            linear-gradient(
+                180deg,
+                #2389d7,
+                #1767aa
+            ) !important;
+
+        border-color:
+            rgba(90,180,255,0.65) !important;
+    }}
+
+    div.stButton > button[kind="primary"]:hover {{
+        filter: brightness(1.12) !important;
+    }}
+
+    div.stButton > button[kind="primary"]:active {{
+        transform: scale(0.965) translateY(2px) !important;
+        filter: brightness(0.72) !important;
+    }}
+
+    /* Disabled */
+    div.stButton > button:disabled {{
+        opacity: 0.38 !important;
+        cursor: not-allowed !important;
+        box-shadow: none !important;
+    }}
+
+    /* Expander */
+    div[data-testid="stExpander"] {{
+        border-radius: 12px !important;
+        border-color: rgba(255,255,255,0.12) !important;
+        background-color: rgba(20,20,20,0.55) !important;
+    }}
+
     </style>
     """,
     unsafe_allow_html=True
@@ -198,9 +287,12 @@ if "open_camera" not in st.session_state:
 if "edit_log_mode" not in st.session_state:
     st.session_state["edit_log_mode"] = False
 
+if "confirm_clear_day" not in st.session_state:
+    st.session_state["confirm_clear_day"] = False
+
 
 # ============================================================
-# GEMINI API
+# GEMINI
 # ============================================================
 
 api_key = (
@@ -234,13 +326,11 @@ def load_settings():
     if os.path.exists(SETTINGS_FILE):
 
         try:
-
             with open(
                 SETTINGS_FILE,
                 "r",
                 encoding="utf-8"
             ) as f:
-
                 saved = json.load(f)
 
             return {
@@ -271,7 +361,7 @@ def save_settings(settings):
 
 
 # ============================================================
-# WEIGHT
+# WEIGHT FILE
 # ============================================================
 
 def load_weight():
@@ -279,13 +369,11 @@ def load_weight():
     if os.path.exists(WEIGHT_FILE):
 
         try:
-
             with open(
                 WEIGHT_FILE,
                 "r",
                 encoding="utf-8"
             ) as f:
-
                 return json.load(f)
 
         except Exception:
@@ -313,7 +401,7 @@ def save_weight(weight_data):
 
 
 # ============================================================
-# LOAD DATA
+# DATA
 # ============================================================
 
 def load_data():
@@ -323,20 +411,6 @@ def load_data():
         try:
 
             df = pd.read_excel(EXCEL_FILE)
-
-            if "Час" not in df.columns:
-
-                df["Час"] = datetime.now(
-                    LOCAL_TZ
-                ).strftime("%H:%M")
-
-            else:
-
-                df["Час"] = df["Час"].fillna(
-                    datetime.now(
-                        LOCAL_TZ
-                    ).strftime("%H:%M")
-                )
 
             required_columns = [
                 "Дата",
@@ -361,12 +435,17 @@ def load_data():
                         "Жири",
                         "Вуглеводи"
                     ]:
-
                         df[column] = 0
-
                     else:
-
                         df[column] = ""
+
+            if "Час" in df.columns:
+
+                df["Час"] = df["Час"].fillna(
+                    datetime.now(
+                        LOCAL_TZ
+                    ).strftime("%H:%M")
+                )
 
             numeric_columns = [
                 "Спожито",
@@ -404,20 +483,189 @@ def load_data():
 
 
 # ============================================================
-# РОЗРАХУНОК ВАГИ
+# UNDO — ДО 10 ОПЕРАЦІЙ
 # ============================================================
 
-def calculate_current_weight(
-    df,
-    settings
+def load_undo_stack():
+
+    if not os.path.exists(TRASH_FILE):
+        return []
+
+    try:
+
+        with open(
+            TRASH_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            data = json.load(f)
+
+        if isinstance(data, list):
+            return data
+
+    except Exception:
+        pass
+
+    return []
+
+
+def save_undo_stack(stack):
+
+    stack = stack[-10:]
+
+    with open(
+        TRASH_FILE,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        json.dump(
+            stack,
+            f,
+            ensure_ascii=False
+        )
+
+
+def dataframe_to_records(df):
+
+    if df.empty:
+        return []
+
+    result = []
+
+    for record in df.to_dict(
+        orient="records"
+    ):
+
+        clean_record = {}
+
+        for key, value in record.items():
+
+            if pd.isna(value):
+                clean_record[key] = ""
+            elif isinstance(
+                value,
+                (int, float)
+            ):
+                clean_record[key] = float(value)
+            else:
+                clean_record[key] = str(value)
+
+        result.append(clean_record)
+
+    return result
+
+
+def records_to_dataframe(records):
+
+    columns = [
+        "Дата",
+        "Час",
+        "Опис",
+        "Тип",
+        "Спожито",
+        "Спалено",
+        "Білки",
+        "Жири",
+        "Вуглеводи"
+    ]
+
+    if not records:
+        return pd.DataFrame(
+            columns=columns
+        )
+
+    df = pd.DataFrame(records)
+
+    for column in columns:
+
+        if column not in df.columns:
+
+            if column in [
+                "Спожито",
+                "Спалено",
+                "Білки",
+                "Жири",
+                "Вуглеводи"
+            ]:
+                df[column] = 0
+            else:
+                df[column] = ""
+
+    df = df[columns]
+
+    for column in [
+        "Спожито",
+        "Спалено",
+        "Білки",
+        "Жири",
+        "Вуглеводи"
+    ]:
+
+        df[column] = pd.to_numeric(
+            df[column],
+            errors="coerce"
+        ).fillna(0)
+
+    return df
+
+
+def push_undo(df):
+
+    stack = load_undo_stack()
+
+    stack.append(
+        dataframe_to_records(df)
+    )
+
+    stack = stack[-10:]
+
+    save_undo_stack(stack)
+
+
+def undo_last(df):
+
+    stack = load_undo_stack()
+
+    if not stack:
+        return df, False
+
+    previous_records = stack.pop()
+
+    previous_df = records_to_dataframe(
+        previous_records
+    )
+
+    save_undo_stack(stack)
+
+    previous_df.to_excel(
+        EXCEL_FILE,
+        index=False
+    )
+
+    return previous_df, True
+
+
+# ============================================================
+# РОЗРАХУНОК ДНЯ
+# ============================================================
+
+def calculate_day_balance(
+    day_df,
+    date_str,
+    settings,
+    current_time=None
 ):
 
-    initial_weight = float(
-        settings.get(
-            "initial_weight",
-            89.0
-        )
-    )
+    if day_df is None or day_df.empty:
+        return {
+            "consumed": 0.0,
+            "active": 0.0,
+            "bmr": 0.0,
+            "burned": 0.0,
+            "balance": 0.0
+        }
 
     bmr_daily = float(
         settings.get(
@@ -433,8 +681,84 @@ def calculate_current_weight(
         )
     )
 
+    consumed = float(
+        pd.to_numeric(
+            day_df["Спожито"],
+            errors="coerce"
+        ).fillna(0).sum()
+    )
+
+    active = float(
+        pd.to_numeric(
+            day_df["Спалено"],
+            errors="coerce"
+        ).fillna(0).sum()
+    )
+
+    today = datetime.now(
+        LOCAL_TZ
+    ).strftime("%Y-%m-%d")
+
+    if date_str == today:
+
+        if current_time is None:
+            current_time = datetime.now(
+                LOCAL_TZ
+            )
+
+        hours_passed = (
+            current_time.hour
+            + current_time.minute / 60
+            + current_time.second / 3600
+        )
+
+        bmr = (
+            bmr_daily / 24
+        ) * hours_passed
+
+    else:
+
+        bmr = bmr_daily
+
+    burned = bmr
+
+    if include_exercise:
+        burned += active
+
+    balance = burned - consumed
+
+    return {
+        "consumed": consumed,
+        "active": active,
+        "bmr": bmr,
+        "burned": burned,
+        "balance": balance
+    }
+
+
+# ============================================================
+# ВСЯ ІСТОРІЯ
+# ============================================================
+
+def calculate_history(
+    df,
+    settings
+):
+
     if df.empty:
-        return initial_weight
+
+        return pd.DataFrame(
+            columns=[
+                "Дата",
+                "З'їдено",
+                "БМР",
+                "Активність",
+                "Витрачено",
+                "Баланс",
+                "Накопичений баланс",
+                "Розрахункова вага"
+            ]
+        )
 
     work_df = df.copy()
 
@@ -443,15 +767,20 @@ def calculate_current_weight(
         .astype(str)
     )
 
-    for column in [
-        "Спожито",
-        "Спалено"
-    ]:
+    dates = sorted(
+        work_df["Дата"].unique()
+    )
 
-        work_df[column] = pd.to_numeric(
-            work_df[column],
-            errors="coerce"
-        ).fillna(0)
+    initial_weight = float(
+        settings.get(
+            "initial_weight",
+            89.0
+        )
+    )
+
+    rows = []
+
+    accumulated = 0.0
 
     today = datetime.now(
         LOCAL_TZ
@@ -461,84 +790,84 @@ def calculate_current_weight(
         LOCAL_TZ
     )
 
-    accumulated_balance = 0.0
-
-    unique_dates = sorted(
-        work_df["Дата"].unique()
-    )
-
-    for date_str in unique_dates:
+    for date_str in dates:
 
         day_df = work_df[
             work_df["Дата"] == date_str
         ]
 
-        consumed_day = float(
-            day_df["Спожито"].sum()
-        )
-
-        active_burned_day = float(
-            day_df["Спалено"].sum()
-        )
-
         if date_str == today:
-
-            hours_passed = (
-                now.hour
-                + now.minute / 60
-                + now.second / 3600
-            )
-
-            bmr_for_day = (
-                bmr_daily / 24
-            ) * hours_passed
-
+            current_time = now
         else:
+            current_time = None
 
-            bmr_for_day = bmr_daily
-
-        if include_exercise:
-
-            total_burned_day = (
-                bmr_for_day
-                + active_burned_day
-            )
-
-        else:
-
-            total_burned_day = bmr_for_day
-
-        daily_balance = (
-            total_burned_day
-            - consumed_day
+        result = calculate_day_balance(
+            day_df,
+            date_str,
+            settings,
+            current_time
         )
 
-        accumulated_balance += daily_balance
+        accumulated += result["balance"]
 
-    weight_change = (
-        accumulated_balance / 7700
+        calculated_weight = (
+            initial_weight
+            - accumulated / 7700
+        )
+
+        rows.append({
+            "Дата": date_str,
+            "З'їдено": result["consumed"],
+            "БМР": result["bmr"],
+            "Активність": result["active"],
+            "Витрачено": result["burned"],
+            "Баланс": result["balance"],
+            "Накопичений баланс": accumulated,
+            "Розрахункова вага": max(
+                0,
+                calculated_weight
+            )
+        })
+
+    return pd.DataFrame(rows)
+
+
+def get_current_calculated_weight(
+    df,
+    settings
+):
+
+    history = calculate_history(
+        df,
+        settings
     )
 
-    calculated_weight = (
-        initial_weight
-        - weight_change
+    initial_weight = float(
+        settings.get(
+            "initial_weight",
+            89.0
+        )
     )
 
-    return max(
-        0.0,
-        calculated_weight
+    if history.empty:
+        return initial_weight
+
+    return float(
+        history.iloc[-1][
+            "Розрахункова вага"
+        ]
     )
 
 
 # ============================================================
-# ЗАВАНТАЖЕННЯ
+# LOAD
 # ============================================================
 
 user_settings = load_settings()
 w_data = load_weight()
 df_data = load_data()
 
-calculated_weight = calculate_current_weight(
+current_weight = get_current_calculated_weight(
     df_data,
     user_settings
 )
@@ -606,7 +935,7 @@ with st.container(border=True):
 
 
 # ============================================================
-# GEMINI LOG
+# ADD ENTRY
 # ============================================================
 
 if submit_btn and (
@@ -701,6 +1030,9 @@ if submit_btn and (
             data.get("total_carbs") or 0
         )
 
+        # Зберігаємо стан ДО зміни
+        push_undo(df_data)
+
         new_entry = pd.DataFrame(
             [{
                 "Дата": current_date_str,
@@ -782,7 +1114,7 @@ selected_date = st.selectbox(
 
 
 # ============================================================
-# BUTTONS
+# MAIN BUTTONS
 # ============================================================
 
 btn_settings = st.button(
@@ -790,24 +1122,24 @@ btn_settings = st.button(
     use_container_width=True
 )
 
+undo_stack = load_undo_stack()
+
+has_undo = len(undo_stack) > 0
+
 btn_del = st.button(
     "🗑️ Видалити останній запис",
     use_container_width=True
 )
 
-has_trash = os.path.exists(
-    TRASH_FILE
-)
-
 btn_back = st.button(
     "🔄 Повернути",
-    disabled=not has_trash,
+    disabled=not has_undo,
     use_container_width=True
 )
 
 
 # ============================================================
-# SETTINGS BUTTON
+# SETTINGS
 # ============================================================
 
 if btn_settings:
@@ -822,31 +1154,14 @@ if btn_settings:
 
 
 # ============================================================
-# DELETE LAST
+# DELETE LAST RECORD
 # ============================================================
 
 if btn_del:
 
     if not df_data.empty:
 
-        last_row = (
-            df_data.iloc[-1:]
-            .to_dict(
-                orient="records"
-            )
-        )
-
-        with open(
-            TRASH_FILE,
-            "w",
-            encoding="utf-8"
-        ) as f:
-
-            json.dump(
-                last_row,
-                f,
-                ensure_ascii=False
-            )
+        push_undo(df_data)
 
         df_data = df_data.iloc[:-1]
 
@@ -859,45 +1174,26 @@ if btn_del:
 
 
 # ============================================================
-# RESTORE
+# UNDO
 # ============================================================
 
-if btn_back and has_trash:
+if btn_back:
 
-    try:
+    df_data, restored = undo_last(
+        df_data
+    )
 
-        with open(
-            TRASH_FILE,
-            "r",
-            encoding="utf-8"
-        ) as f:
+    if restored:
 
-            restored = json.load(f)
+        st.session_state[
+            "show_advice"
+        ] = False
 
-        df_data = pd.concat(
-            [
-                df_data,
-                pd.DataFrame(restored)
-            ],
-            ignore_index=True
-        )
-
-        df_data.to_excel(
-            EXCEL_FILE,
-            index=False
-        )
-
-        os.remove(
-            TRASH_FILE
-        )
+        st.session_state[
+            "edit_log_mode"
+        ] = False
 
         st.rerun()
-
-    except Exception as e:
-
-        st.error(
-            f"Помилка відновлення: {e}"
-        )
 
 
 # ============================================================
@@ -944,7 +1240,7 @@ if st.session_state["edit_mode"]:
             step=5
         )
 
-        e_initial_weight = st.number_input(
+        e_weight = st.number_input(
             "Початкова вага (кг)",
             value=float(
                 user_settings.get(
@@ -981,10 +1277,9 @@ if st.session_state["edit_mode"]:
                     "bmr_daily",
                     1850
                 ),
-                "initial_weight": e_initial_weight,
-                "include_exercise_in_deficit": (
+                "initial_weight": e_weight,
+                "include_exercise_in_deficit":
                     e_include_exercise
-                )
             }
 
             save_settings(
@@ -992,8 +1287,7 @@ if st.session_state["edit_mode"]:
             )
 
             save_weight({
-                "current_weight":
-                    e_initial_weight
+                "current_weight": e_weight
             })
 
             st.session_state[
@@ -1022,90 +1316,57 @@ now = datetime.now(
 
 
 # ============================================================
-# DISPLAY DAY
+# DAY DISPLAY
 # ============================================================
 
 if not day_df.empty:
 
-    consumed = float(
-        day_df["Спожито"].sum()
+    day_result = calculate_day_balance(
+        day_df,
+        selected_date,
+        user_settings,
+        now
     )
 
-    explicit_burned = float(
-        day_df["Спалено"].sum()
-    )
+    consumed = day_result[
+        "consumed"
+    ]
+
+    active_burned = day_result[
+        "active"
+    ]
+
+    bmr_used = day_result[
+        "bmr"
+    ]
+
+    total_burned = day_result[
+        "burned"
+    ]
+
+    balance = day_result[
+        "balance"
+    ]
 
     protein = float(
-        day_df["Білки"].sum()
+        pd.to_numeric(
+            day_df["Білки"],
+            errors="coerce"
+        ).fillna(0).sum()
     )
 
     fat = float(
-        day_df["Жири"].sum()
+        pd.to_numeric(
+            day_df["Жири"],
+            errors="coerce"
+        ).fillna(0).sum()
     )
 
     carbs = float(
-        day_df["Вуглеводи"].sum()
-    )
-
-    bmr_total = float(
-        user_settings.get(
-            "bmr_daily",
-            1850
-        )
-    )
-
-    include_exercise = bool(
-        user_settings.get(
-            "include_exercise_in_deficit",
-            True
-        )
-    )
-
-
-    # --------------------------------------------------------
-    # BMR
-    # --------------------------------------------------------
-
-    if selected_date == today_str:
-
-        hours_passed = (
-            now.hour
-            + now.minute / 60
-            + now.second / 3600
-        )
-
-        bmr_used = (
-            bmr_total / 24
-        ) * hours_passed
-
-    else:
-
-        bmr_used = bmr_total
-
-
-    # --------------------------------------------------------
-    # ACTIVE CALORIES
-    # --------------------------------------------------------
-
-    if include_exercise:
-
-        total_burned = (
-            bmr_used
-            + explicit_burned
-        )
-
-    else:
-
-        total_burned = bmr_used
-
-
-    # --------------------------------------------------------
-    # BALANCE
-    # --------------------------------------------------------
-
-    balance = (
-        total_burned
-        - consumed
+        pd.to_numeric(
+            day_df["Вуглеводи"],
+            errors="coerce"
+        ).fillna(0).sum()
     )
 
     target_cal = user_settings[
@@ -1126,7 +1387,7 @@ if not day_df.empty:
 
 
     # ========================================================
-    # BALANCE TEXT
+    # BALANCE
     # ========================================================
 
     if balance >= 0:
@@ -1151,18 +1412,57 @@ if not day_df.empty:
 
 
     # ========================================================
-    # DATE + WEIGHT
+    # CURRENT WEIGHT
+    # ========================================================
+
+    current_weight = get_current_calculated_weight(
+        df_data,
+        user_settings
+    )
+
+    initial_weight = float(
+        user_settings.get(
+            "initial_weight",
+            89.0
+        )
+    )
+
+    weight_change = (
+        current_weight
+        - initial_weight
+    )
+
+
+    if weight_change <= 0:
+
+        weight_change_text = (
+            f"−{abs(weight_change):.2f} кг"
+        )
+
+    else:
+
+        weight_change_text = (
+            f"+{weight_change:.2f} кг"
+        )
+
+
+    # ========================================================
+    # DATE / WEIGHT
     # ========================================================
 
     st.markdown(
-        f"**📅 {selected_date} | "
-        f"Вага (розрахункова): "
-        f"{calculated_weight:.1f} кг**"
+        f"""
+        **📅 {selected_date}**
+
+        ⚖️ **Вага (розрахункова): "
+        f"{current_weight:.1f} кг** "
+        f"({weight_change_text} від початкової)
+        """
     )
 
 
     # ========================================================
-    # MACROS
+    # DONUT
     # ========================================================
 
     total_macros = (
@@ -1201,25 +1501,76 @@ if not day_df.empty:
         c_deg = 0
 
 
-    # ========================================================
-    # DONUT
-    # ========================================================
-
     st.markdown(
-f"""<div class="donut-container">
-<div class="donut-ring" style="background: conic-gradient(#36A2EB 0deg {p_deg}deg, #FFCE56 {p_deg}deg {f_deg}deg, #FF6384 {f_deg}deg {c_deg}deg);">
-<div class="donut-hole">
-<span style="font-size: 10px; color: {balance_color};">{balance_label}: {balance_text}</span>
-<b style="font-size: 14px;">{int(consumed)} / {target_cal}</b>
-<span style="font-size: 9px; color: #888;">ккал</span>
-</div>
-</div>
-<div class="macros-row">
-<span style="color: #36A2EB;">🥩 Білки: {protein:.0f} / {target_p}г</span>
-<span style="color: #FFCE56;">🥑 Жири: {fat:.0f} / {target_f}г</span>
-<span style="color: #FF6384;">🍞 Вугл: {carbs:.0f} / {target_c}г</span>
-</div>
-</div>""",
+        f"""
+        <div class="donut-container">
+
+            <div
+                class="donut-ring"
+                style="
+                    background:
+                    conic-gradient(
+                        #36A2EB 0deg {p_deg}deg,
+                        #FFCE56 {p_deg}deg {f_deg}deg,
+                        #FF6384 {f_deg}deg {c_deg}deg
+                    );
+                "
+            >
+
+                <div class="donut-hole">
+
+                    <span
+                        style="
+                            font-size: 10px;
+                            color: {balance_color};
+                        "
+                    >
+                        {balance_label}:
+                        {balance_text}
+                    </span>
+
+                    <b
+                        style="
+                            font-size: 14px;
+                        "
+                    >
+                        {int(consumed)} / {target_cal}
+                    </b>
+
+                    <span
+                        style="
+                            font-size: 9px;
+                            color: #888;
+                        "
+                    >
+                        ккал
+                    </span>
+
+                </div>
+
+            </div>
+
+            <div class="macros-row">
+
+                <span style="color: #36A2EB;">
+                    🥩 Білки:
+                    {protein:.0f} / {target_p}г
+                </span>
+
+                <span style="color: #FFCE56;">
+                    🥑 Жири:
+                    {fat:.0f} / {target_f}г
+                </span>
+
+                <span style="color: #FF6384;">
+                    🍞 Вугл:
+                    {carbs:.0f} / {target_c}г
+                </span>
+
+            </div>
+
+        </div>
+        """,
         unsafe_allow_html=True
     )
 
@@ -1239,6 +1590,32 @@ f"""<div class="donut-container">
         "🔥 Спалено",
         f"{int(total_burned)} ккал"
     )
+
+
+    # ========================================================
+    # DETAIL OF CALORIES
+    # ========================================================
+
+    with st.expander(
+        "🔥 Деталі витрат калорій"
+    ):
+
+        d1, d2, d3 = st.columns(3)
+
+        d1.metric(
+            "🫀 БМР",
+            f"{int(bmr_used)} ккал"
+        )
+
+        d2.metric(
+            "🏃 Активність",
+            f"{int(active_burned)} ккал"
+        )
+
+        d3.metric(
+            "🔥 Разом",
+            f"{int(total_burned)} ккал"
+        )
 
 
     # ========================================================
@@ -1268,21 +1645,33 @@ f"""<div class="donut-container">
         )
 
         log_html_lines.append(
-            f'<div class="log-item">'
-            f'<div class="log-left">'
-            f'{t_val} {icon} {desc}'
-            f'</div>'
-            f'<div class="log-right">'
-            f'<b>{kcal} ккал</b>'
-            f'</div>'
-            f'</div>'
+            f"""
+            <div class="log-item">
+
+                <div class="log-left">
+                    {t_val}
+                    {icon}
+                    {desc}
+                </div>
+
+                <div class="log-right">
+                    <b>{kcal} ккал</b>
+                </div>
+
+            </div>
+            """
         )
 
     st.markdown(
-        f'<div class="food-box">'
-        f'<b>📝 Лог:</b><br>'
-        f'{"".join(log_html_lines)}'
-        f'</div>',
+        f"""
+        <div class="food-box">
+
+            <b>📝 Лог:</b><br>
+
+            {"".join(log_html_lines)}
+
+        </div>
+        """,
         unsafe_allow_html=True
     )
 
@@ -1327,6 +1716,9 @@ f"""<div class="donut-container">
                 use_container_width=True
             ):
 
+                # Зберігаємо стан до редагування
+                push_undo(df_data)
+
                 df_data.loc[
                     day_indices
                 ] = edited_day_df
@@ -1362,23 +1754,37 @@ f"""<div class="donut-container">
 
         try:
 
+            advice_prompt = (
+                f"Аналіз за {selected_date}. "
+                f"З'їдено: {consumed:.0f} ккал. "
+                f"БМР: {bmr_used:.0f} ккал. "
+                f"Активність: {active_burned:.0f} ккал. "
+                f"Всього витрачено: "
+                f"{total_burned:.0f} ккал. "
+                f"Баланс: {balance:.0f} ккал. "
+                f"Білки: {protein:.0f} г. "
+                f"Жири: {fat:.0f} г. "
+                f"Вуглеводи: {carbs:.0f} г. "
+                f"Дай коротку практичну пораду."
+            )
+
             advice_resp = (
                 client.models.generate_content(
                     model="gemini-3.5-flash",
-                    contents=(
-                        f"Аналіз за {selected_date}: "
-                        f"{consumed} ккал, "
-                        f"{protein}г білків. "
-                        f"Коротка порада."
-                    )
+                    contents=advice_prompt
                 )
             )
 
             st.markdown(
-                f'<div class="advice-box">'
-                f'<b>💡 Порада:</b><br>'
-                f'{advice_resp.text}'
-                f'</div>',
+                f"""
+                <div class="advice-box">
+
+                    <b>💡 Порада:</b><br>
+
+                    {advice_resp.text}
+
+                </div>
+                """,
                 unsafe_allow_html=True
             )
 
@@ -1389,31 +1795,305 @@ f"""<div class="donut-container">
             )
 
 
-    # ========================================================
-    # CLEAR SELECTED DAY
-    # ========================================================
-
-    if st.button(
-        "⚠️ Очистити цей день",
-        use_container_width=True
-    ):
-
-        df_data = df_data[
-            df_data["Дата"].astype(str)
-            != selected_date
-        ]
-
-        df_data.to_excel(
-            EXCEL_FILE,
-            index=False
-        )
-
-        st.rerun()
-
-
 else:
 
     st.info(
         f"За цей день ({selected_date}) "
         f"ще немає записів."
     )
+
+
+# ============================================================
+# НАКОПИЧУВАЛЬНИЙ ДЕФІЦИТ
+# ============================================================
+
+history_df = calculate_history(
+    df_data,
+    user_settings
+)
+
+if not history_df.empty:
+
+    accumulated_balance = float(
+        history_df.iloc[-1][
+            "Накопичений баланс"
+        ]
+    )
+
+    accumulated_weight_change = (
+        accumulated_balance / 7700
+    )
+
+    if accumulated_balance >= 0:
+
+        acc_title = "🔥 Накопичений дефіцит"
+
+        acc_text = (
+            f"−{abs(int(accumulated_balance)):,}"
+            .replace(",", " ")
+            + " ккал"
+        )
+
+        acc_weight = (
+            f"−{abs(accumulated_weight_change):.2f} кг"
+        )
+
+    else:
+
+        acc_title = "⚠️ Накопичений профіцит"
+
+        acc_text = (
+            f"+{abs(int(accumulated_balance)):,}"
+            .replace(",", " ")
+            + " ккал"
+        )
+
+        acc_weight = (
+            f"+{abs(accumulated_weight_change):.2f} кг"
+        )
+
+    with st.container(border=True):
+
+        st.subheader(
+            acc_title
+        )
+
+        a1, a2 = st.columns(2)
+
+        a1.metric(
+            "Баланс за весь час",
+            acc_text
+        )
+
+        a2.metric(
+            "Розрахункова зміна ваги",
+            acc_weight
+        )
+
+
+# ============================================================
+# ТИЖНЕВИЙ ПІДСУМОК
+# ============================================================
+
+if not history_df.empty:
+
+    today = datetime.now(
+        LOCAL_TZ
+    ).date()
+
+    week_start = (
+        today
+        - timedelta(days=6)
+    )
+
+    history_dates = pd.to_datetime(
+        history_df["Дата"],
+        errors="coerce"
+    )
+
+    week_mask = (
+        history_dates.dt.date
+        >= week_start
+    ) & (
+        history_dates.dt.date
+        <= today
+    )
+
+    week_df = history_df[
+        week_mask
+    ]
+
+    if not week_df.empty:
+
+        week_consumed = float(
+            week_df["З'їдено"].sum()
+        )
+
+        week_burned = float(
+            week_df["Витрачено"].sum()
+        )
+
+        week_active = float(
+            week_df["Активність"].sum()
+        )
+
+        week_balance = (
+            week_burned
+            - week_consumed
+        )
+
+        week_weight_change = (
+            week_balance / 7700
+        )
+
+        with st.container(border=True):
+
+            st.subheader(
+                "📅 Підсумок за останні 7 днів"
+            )
+
+            w1, w2 = st.columns(2)
+
+            w1.metric(
+                "🍽️ З'їдено",
+                f"{int(week_consumed)} ккал"
+            )
+
+            w2.metric(
+                "🔥 Витрачено",
+                f"{int(week_burned)} ккал"
+            )
+
+            w3, w4 = st.columns(2)
+
+            if week_balance >= 0:
+
+                w3.metric(
+                    "📉 Дефіцит",
+                    f"−{abs(int(week_balance))} ккал"
+                )
+
+                w4.metric(
+                    "⚖️ Зміна ваги",
+                    f"−{abs(week_weight_change):.2f} кг"
+                )
+
+            else:
+
+                w3.metric(
+                    "📈 Профіцит",
+                    f"+{abs(int(week_balance))} ккал"
+                )
+
+                w4.metric(
+                    "⚖️ Зміна ваги",
+                    f"+{abs(week_weight_change):.2f} кг"
+                )
+
+            st.caption(
+                f"🏃 Активні калорії: "
+                f"{int(week_active)} ккал"
+            )
+
+
+# ============================================================
+# ГРАФІК ВАГИ
+# ============================================================
+
+if not history_df.empty:
+
+    chart_df = history_df[
+        [
+            "Дата",
+            "Розрахункова вага"
+        ]
+    ].copy()
+
+    chart_df["Дата"] = pd.to_datetime(
+        chart_df["Дата"],
+        errors="coerce"
+    )
+
+    chart_df = chart_df.dropna(
+        subset=["Дата"]
+    )
+
+    chart_df = chart_df.set_index(
+        "Дата"
+    )
+
+    if len(chart_df) >= 1:
+
+        with st.container(border=True):
+
+            st.subheader(
+                "⚖️ Графік розрахункової ваги"
+            )
+
+            st.line_chart(
+                chart_df[
+                    ["Розрахункова вага"]
+                ],
+                height=260,
+                use_container_width=True
+            )
+
+
+# ============================================================
+# БЕЗПЕЧНЕ ОЧИЩЕННЯ ДНЯ
+# ============================================================
+
+with st.expander(
+    "⚠️ Небезпечні дії"
+):
+
+    st.caption(
+        "Очищення дня видалить усі записи "
+        "за вибрану дату. Перед видаленням "
+        "буде створено резервну копію, "
+        "і дію можна буде скасувати."
+    )
+
+    if not st.session_state[
+        "confirm_clear_day"
+    ]:
+
+        if st.button(
+            "⚠️ Очистити цей день",
+            use_container_width=True
+        ):
+
+            st.session_state[
+                "confirm_clear_day"
+            ] = True
+
+            st.rerun()
+
+    else:
+
+        st.warning(
+            f"Точно видалити всі записи "
+            f"за {selected_date}?"
+        )
+
+        confirm_col1, confirm_col2 = (
+            st.columns(2)
+        )
+
+        with confirm_col1:
+
+            if st.button(
+                "❌ Так, видалити",
+                use_container_width=True
+            ):
+
+                push_undo(df_data)
+
+                df_data = df_data[
+                    df_data["Дата"].astype(str)
+                    != selected_date
+                ]
+
+                df_data.to_excel(
+                    EXCEL_FILE,
+                    index=False
+                )
+
+                st.session_state[
+                    "confirm_clear_day"
+                ] = False
+
+                st.rerun()
+
+        with confirm_col2:
+
+            if st.button(
+                "↩️ Скасувати",
+                use_container_width=True
+            ):
+
+                st.session_state[
+                    "confirm_clear_day"
+                ] = False
+
+                st.rerun()
