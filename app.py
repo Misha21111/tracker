@@ -37,7 +37,6 @@ st.markdown(
     .donut-ring {{ width: 190px; height: 190px; border-radius: 50%; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 15px rgba(0,0,0,0.8); }}
     .donut-hole {{ width: 125px; height: 125px; background-color: #141414; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: white; }}
     .macros-row {{ display: flex; justify-content: space-around; width: 100%; max-width: 340px; margin-top: 12px; font-size: 11px; background-color: rgba(20, 20, 20, 0.9); padding: 8px 6px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.1); }}
-    .stButton button {{ width: 100%; border-radius: 10px; }}
 
     .log-item {{
         display: flex;
@@ -281,8 +280,6 @@ if not day_df.empty:
     if st.session_state["edit_log_mode"]:
         with st.container(border=True):
             st.subheader("Редагування записів за день")
-            
-            # Отримуємо індекси та дані цього дня
             day_indices = day_df.index
             edited_day_df = st.data_editor(df_data.loc[day_indices], key=f"editor_{selected_date}", use_container_width=True)
             
