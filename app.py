@@ -381,7 +381,7 @@ def normalize_products(products):
     for p in products:
         if isinstance(p, dict):
             name = str(p.get("name", "")).strip()
-            if name:
+            if name and name.lower() != "nan":
                 res.append({
                     "name": name,
                     "kcal": float(p.get("kcal", 0) or 0),
@@ -400,15 +400,14 @@ def row_products(row):
         pass
     if str(row.get("Тип", "")) == "Їжа":
         desc = str(row.get("Опис", "")).strip()
-        if not desc or desc.lower() == "nan":
-            desc = "Їжа"
-        return [{
-            "name": desc,
-            "kcal": float(row.get("Спожито", 0) or 0),
-            "protein": float(row.get("Білки", 0) or 0),
-            "fat": float(row.get("Жири", 0) or 0),
-            "carbs": float(row.get("Вуглеводи", 0) or 0)
-        }]
+        if desc and desc.lower() != "nan":
+            return [{
+                "name": desc,
+                "kcal": float(row.get("Спожито", 0) or 0),
+                "protein": float(row.get("Білки", 0) or 0),
+                "fat": float(row.get("Жири", 0) or 0),
+                "carbs": float(row.get("Вуглеводи", 0) or 0)
+            }]
     return []
 
 def today_bmr(settings, date_str):
@@ -676,27 +675,37 @@ if st.session_state["edit_mode"]:
 st.markdown(f"### 📝 Влог за {selected_date}")
 day_df = df[df["Дата"].astype(str) == str(selected_date)].copy()
 
+# Прибираємо порожні записи та записи з 0 ккал
+if not day_df.empty:
+    day_df = day_df[(day_df["Спожито"] > 0) | (day_df["Спалено"] > 0)]
+
 if day_df.empty:
-    st.info("За цей день записів ще немає.")
+    st.info("За цей день інформативних записів немає.")
 else:
     for idx, row in day_df.iloc[::-1].iterrows():
         entry_type = str(row["Тип"])
         icon = "🍽️" if entry_type == "Їжа" else "💪"
         kcal = float(row["Спожито"] if entry_type == "Їжа" else row["Спалено"])
-        products = row_products(row)
+        
+        # Ігноруємо якщо 0 ккал
+        if kcal <= 0:
+            continue
 
         desc = str(row["Опис"]).strip()
         if not desc or desc.lower() == "nan":
             desc = "Тренування" if entry_type == "Тренування" else "Прийом їжі"
 
+        products = row_products(row)
         food_lines = ""
         if entry_type == "Їжа" and products:
-            p_items = "".join([f'<div class="food-line"><span class="food-name">🍴 {p["name"]}</span><span class="food-cal">{p["kcal"]:.0f} ккал</span></div>' for p in products])
-            food_lines = f'<div class="food-list">{p_items}</div>'
+            p_items = "".join([f'<div class="food-line"><span class="food-name">🍴 {p["name"]}</span><span class="food-cal">{p["kcal"]:.0f} ккал</span></div>' for p in products if p["kcal"] > 0 or p["name"].lower() != "nan"])
+            if p_items:
+                food_lines = f'<div class="food-list">{p_items}</div>'
 
         bju = ""
-        if entry_type == "Їжа":
-            bju = f'<div class="bju"><span>🥩 {float(row["Білки"]):.0f} г</span><span>🥑 {float(row["Жири"]):.0f} г</span><span>🍞 {float(row["Вуглеводи"]):.0f} г</span></div>'
+        p_val, f_val, c_val = float(row["Білки"]), float(row["Жири"]), float(row["Вуглеводи"])
+        if entry_type == "Їжа" and (p_val > 0 or f_val > 0 or c_val > 0):
+            bju = f'<div class="bju"><span>🥩 {p_val:.0f} г</span><span>🥑 {f_val:.0f} г</span><span>🍞 {c_val:.0f} г</span></div>'
 
         html = f'<div class="log-card"><div class="log-head"><div class="log-title">{str(row["Час"])[:5]} {icon} {desc}</div><div class="log-kcal">{kcal:+.0f} ккал</div></div>{food_lines}{bju}</div>'
         st.markdown(html, unsafe_allow_html=True)
