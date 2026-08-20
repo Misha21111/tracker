@@ -1,12 +1,6 @@
-# Обмежуємо кути, щоб conic-gradient завжди був коректним
-p_deg = max(0, min(360, p_deg))
-f_deg = max(p_deg, min(360, f_deg))
-c_deg = max(f_deg, min(360, c_deg))
-
 st.markdown(
     f"""
     <div class="donut-container">
-
         <div
             class="donut-ring"
             style="
@@ -17,53 +11,47 @@ st.markdown(
                 );
             "
         >
-
             <div class="donut-hole">
-
-                <span style="
-                    font-size: 10px;
-                    color: {balance_color};
-                ">
+                <span
+                    style="
+                        font-size: 10px;
+                        color: {balance_color};
+                    "
+                >
                     {balance_label}: {balance_text}
                 </span>
 
-                <b style="
-                    font-size: 14px;
-                    display: block;
-                ">
+                <b style="font-size: 14px;">
                     {int(consumed)} / {int(target_cal)}
                 </b>
 
-                <span style="
-                    font-size: 9px;
-                    color: #888;
-                ">
+                <span
+                    style="
+                        font-size: 9px;
+                        color: #888;
+                    "
+                >
                     ккал
                 </span>
-
             </div>
-
         </div>
 
         <div class="macros-row">
-
             <span style="color: #36A2EB;">
                 🥩 Білки:
-                {protein:.0f} / {target_p}г
+                {protein:.0f} / {target_p:.0f}г
             </span>
 
             <span style="color: #FFCE56;">
                 🥑 Жири:
-                {fat:.0f} / {target_f}г
+                {fat:.0f} / {target_f:.0f}г
             </span>
 
             <span style="color: #FF6384;">
                 🍞 Вугл:
-                {carbs:.0f} / {target_c}г
+                {carbs:.0f} / {target_c:.0f}г
             </span>
-
         </div>
-
     </div>
     """,
     unsafe_allow_html=True
