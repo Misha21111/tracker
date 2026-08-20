@@ -31,17 +31,6 @@ st.markdown(
     .stApp {{ background-image: linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.85)), url("{IMAGE_URL}"); background-size: cover; background-position: center; background-attachment: fixed; }}
     #MainMenu, footer, header {{visibility: hidden;}}
     
-    /* ФІКС КНОПОК: робимо обгортку та саму кнопку компактними */
-    div.stButton {{
-        display: inline-block !important;
-        width: auto !important;
-    }}
-    div.stButton > button {{
-        width: auto !important;
-        display: inline-block !important;
-        padding: 0.35rem 1rem !important;
-    }}
-    
     div[data-testid="stMetric"], div[data-testid="stMarkdownContainer"], div[data-testid="stVerticalBlockBorderWrapper"] {{ background-color: rgba(20, 20, 20, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 10px 14px; color: white; }}
     .food-box, .advice-box {{ background-color: rgba(20, 20, 20, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 12px 16px; color: #ffffff; margin-top: 10px; }}
     .advice-box {{ border-left: 4px solid #36A2EB; }}
@@ -125,18 +114,16 @@ st.title(f"🏋️ Фітнес: {user_profile}")
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
     
-    col_a, col_b = st.columns(2)
-    with col_a:
-        if not st.session_state["open_camera"]:
-            if st.button("📸 Камера"):
-                st.session_state["open_camera"] = True
-                st.rerun()
-        else:
-            if st.button("❌ Вимкнути"):
-                st.session_state["open_camera"] = False
-                st.rerun()
-    with col_b:
-        submit_btn = st.button("✅ Записати", type="primary")
+    if not st.session_state["open_camera"]:
+        if st.button("📸 Увімкнути камеру", use_container_width=True):
+            st.session_state["open_camera"] = True
+            st.rerun()
+    else:
+        if st.button("❌ Вимкнути камеру", use_container_width=True):
+            st.session_state["open_camera"] = False
+            st.rerun()
+            
+    submit_btn = st.button("✅ Записати в лог", type="primary", use_container_width=True)
 
     captured_image = None
     if st.session_state["open_camera"]:
@@ -191,14 +178,10 @@ if not df_data.empty and "Дата" in df_data.columns:
 
 selected_date = st.selectbox("📅 Вибрати день для перегляду:", available_dates)
 
-c1, c2, c3 = st.columns(3)
-with c1:
-    btn_settings = st.button("⚙️ Налаштування")
-with c2:
-    btn_del = st.button("🗑️ Видалити")
-with c3:
-    has_trash = os.path.exists(TRASH_FILE)
-    btn_back = st.button("🔄 Повернути", disabled=not has_trash)
+btn_settings = st.button("⚙️ Налаштування", use_container_width=True)
+btn_del = st.button("🗑️ Видалити останній запис", use_container_width=True)
+has_trash = os.path.exists(TRASH_FILE)
+btn_back = st.button("🔄 Повернути", disabled=not has_trash, use_container_width=True)
 
 if btn_settings: 
     st.session_state["edit_mode"] = not st.session_state["edit_mode"]
@@ -228,7 +211,7 @@ if st.session_state["edit_mode"]:
         e_carb = st.number_input("Ціль вуглеводів (г)", value=int(user_settings["carbs"]), step=5)
         e_weight = st.number_input("Актуальна вага (кг)", value=float(w_data.get("current_weight", 70.0)), step=0.1)
         
-        if st.button("💾 Зберегти зміни", type="primary"):
+        if st.button("💾 Зберегти зміни", type="primary", use_container_width=True):
             save_settings({"calories": e_cal, "protein": e_prot, "fat": e_fat, "carbs": e_carb, "bmr_daily": user_settings.get("bmr_daily", 1850)})
             save_weight({"current_weight": e_weight})
             st.session_state["edit_mode"] = False
@@ -296,7 +279,7 @@ if not day_df.empty:
 
     st.markdown(f'<div class="food-box"><b>📝 Лог:</b><br>{"".join(log_html_lines)}</div>', unsafe_allow_html=True)
     
-    if st.button("✏️ Редагувати лог (таблиця)"):
+    if st.button("✏️ Редагувати лог (таблиця)", use_container_width=True):
         st.session_state["edit_log_mode"] = not st.session_state["edit_log_mode"]
 
     if st.session_state["edit_log_mode"]:
@@ -305,20 +288,20 @@ if not day_df.empty:
             day_indices = day_df.index
             edited_day_df = st.data_editor(df_data.loc[day_indices], key=f"editor_{selected_date}", use_container_width=True)
             
-            if st.button("💾 Зберегти зміни в лозі", type="primary"):
+            if st.button("💾 Зберегти зміни в лозі", type="primary", use_container_width=True):
                 df_data.loc[day_indices] = edited_day_df
                 df_data.to_excel(EXCEL_FILE, index=False)
                 st.session_state["edit_log_mode"] = False
                 st.rerun()
 
-    if st.button("💡 Порада Gemini"):
+    if st.button("💡 Порада Gemini", use_container_width=True):
         st.session_state["show_advice"] = True
 
     if st.session_state["show_advice"]:
         advice_resp = client.models.generate_content(model="gemini-3.5-flash", contents=f"Аналіз за {selected_date}: {consumed} ккал, {protein}г білків. Коротка порада.")
         st.markdown(f'<div class="advice-box"><b>💡 Порада:</b><br>{advice_resp.text}</div>', unsafe_allow_html=True)
     
-    if st.button("⚠️ Очистити цей день"):
+    if st.button("⚠️ Очистити цей день", use_container_width=True):
         df_data = df_data[df_data["Дата"].astype(str) != selected_date]
         df_data.to_excel(EXCEL_FILE, index=False)
         st.rerun()
