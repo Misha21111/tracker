@@ -428,7 +428,9 @@ def calculate_day(df, date_str, settings, watch_burned=0):
     fat = float(food["Жири"].sum())
     carbs = float(food["Вуглеводи"].sum())
     
-    exercise = float(day[day["Тип"].astype(str) == "Тренування"]["Спалено"].sum())
+    # Фільтруємо записи "годинник", щоб не було подвійного підрахунку з верхнім віджетом
+    exercise_df = day[(day["Тип"].astype(str) == "Тренування") & (~day["Опис"].str.contains("годинник", case=False, na=False))]
+    exercise = float(exercise_df["Спалено"].sum())
     watch = float(watch_burned or 0)
     
     burned = today_bmr(settings, date_str) + exercise + watch
@@ -675,9 +677,10 @@ if st.session_state["edit_mode"]:
 st.markdown(f"### 📝 Влог за {selected_date}")
 day_df = df[df["Дата"].astype(str) == str(selected_date)].copy()
 
-# Прибираємо порожні записи та записи з 0 ккал
+# Прибираємо порожні записи, записи з 0 ккал та записи про годинник із загального влогу
 if not day_df.empty:
     day_df = day_df[(day_df["Спожито"] > 0) | (day_df["Спалено"] > 0)]
+    day_df = day_df[~day_df["Опис"].str.contains("годинник", case=False, na=False)]
 
 if day_df.empty:
     st.info("За цей день інформативних записів немає.")
@@ -687,7 +690,6 @@ else:
         icon = "🍽️" if entry_type == "Їжа" else "💪"
         kcal = float(row["Спожито"] if entry_type == "Їжа" else row["Спалено"])
         
-        # Ігноруємо якщо 0 ккал
         if kcal <= 0:
             continue
 
