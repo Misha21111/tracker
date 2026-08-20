@@ -64,7 +64,7 @@ st.markdown(
             url("{IMAGE_URL}") center / cover fixed;
     }}
 
-  #MainMenu, footer { visibility: hidden; }
+  #MainMenu, footer {{ visibility: hidden; }}
 
         visibility: hidden;
     }}
