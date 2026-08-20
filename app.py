@@ -1,5 +1,5 @@
-import json
 import os
+import json
 from datetime import datetime, timedelta, timezone
 
 import pandas as pd
@@ -8,9 +8,9 @@ from google import genai
 from google.genai import types
 
 
-# =========================================================
+# ============================================================
 # ЧАСОВИЙ ПОЯС
-# =========================================================
+# ============================================================
 
 try:
     from zoneinfo import ZoneInfo
@@ -19,9 +19,9 @@ except Exception:
     LOCAL_TZ = timezone(timedelta(hours=2))
 
 
-# =========================================================
+# ============================================================
 # НАЛАШТУВАННЯ STREAMLIT
-# =========================================================
+# ============================================================
 
 st.set_page_config(
     page_title="Мій Фітнес",
@@ -30,9 +30,9 @@ st.set_page_config(
 )
 
 
-# =========================================================
+# ============================================================
 # ПРОФІЛЬ
-# =========================================================
+# ============================================================
 
 user_profile = st.sidebar.selectbox(
     "👤 Профіль",
@@ -42,10 +42,481 @@ user_profile = st.sidebar.selectbox(
 profile_prefix = "user1" if user_profile == "Я" else "user2"
 
 
+# ============================================================
+# ФАЙЛИ
+# ============================================================
+
 EXCEL_FILE = f"fitness_entries_{profile_prefix}.xlsx"
 SETTINGS_FILE = f"user_settings_{profile_prefix}.json"
 TRASH_FILE = f"fitness_trash_{profile_prefix}.json"
+WATCH_FILE = f"watch_burned_{profile_prefix}.json"
 
+
+# ============================================================
+# ФОНОВЕ ЗОБРАЖЕННЯ
+# ============================================================
+
+IMAGE_URL = (
+    "https://i.postimg.cc/kMS67m1J/"
+    "Screenshot-20260819-175524-Facebook.jpg"
+)
+
+
+# ============================================================
+# CSS
+# ============================================================
+
+st.markdown(
+    f"""
+    <style>
+
+    /* ---------- ОСНОВНИЙ ФОН ---------- */
+
+    .stApp {{
+        background:
+            linear-gradient(
+                rgba(0,0,0,.72),
+                rgba(0,0,0,.88)
+            ),
+            url("{IMAGE_URL}") center / cover fixed;
+    }}
+
+    #MainMenu,
+    footer,
+    header {{
+        visibility: hidden;
+    }}
+
+    .block-container {{
+        max-width: 760px;
+        padding-top: 1rem;
+        padding-bottom: 4rem;
+    }}
+
+
+    /* ---------- КНОПКИ ---------- */
+
+    div.stButton > button {{
+        border-radius: 16px !important;
+        min-height: 48px !important;
+
+        border: 1px solid
+            rgba(255,255,255,.18) !important;
+
+        background:
+            rgba(30,32,40,.94) !important;
+
+        color: white !important;
+
+        font-weight: 700 !important;
+
+        transition:
+            transform .10s ease,
+            background .10s ease,
+            box-shadow .10s ease !important;
+    }}
+
+    div.stButton > button:hover {{
+        border-color:
+            rgba(255,255,255,.42) !important;
+
+        background:
+            rgba(45,48,59,.98) !important;
+
+        transform: translateY(-1px);
+    }}
+
+    div.stButton > button:active {{
+        transform: scale(.96) !important;
+
+        background:
+            rgba(70,73,88,1) !important;
+
+        box-shadow:
+            inset 0 3px 10px
+            rgba(0,0,0,.55) !important;
+    }}
+
+
+    /* ---------- INPUT ---------- */
+
+    div[data-baseweb="input"] > div,
+    div[data-baseweb="select"] > div {{
+        background:
+            rgba(32,33,43,.96) !important;
+
+        border-radius: 15px !important;
+
+        border-color:
+            rgba(255,255,255,.10) !important;
+    }}
+
+    input {{
+        color: white !important;
+    }}
+
+
+    /* ---------- СЕКЦІЇ ---------- */
+
+    .section {{
+        background:
+            rgba(10,12,17,.68);
+
+        border:
+            1px solid rgba(255,255,255,.14);
+
+        border-radius: 22px;
+
+        padding: 18px;
+
+        margin: 12px 0;
+
+        backdrop-filter: blur(8px);
+    }}
+
+
+    /* ========================================================
+       КРУЖОК
+       ======================================================== */
+
+    .donut-wrap {{
+        display: flex;
+
+        flex-direction: column;
+
+        align-items: center;
+
+        justify-content: center;
+
+        margin: 12px 0 18px;
+    }}
+
+    .donut {{
+        width: 220px;
+
+        height: 220px;
+
+        border-radius: 50%;
+
+        display: flex;
+
+        align-items: center;
+
+        justify-content: center;
+
+        box-shadow:
+            0 8px 30px
+            rgba(0,0,0,.45);
+    }}
+
+    .donut-hole {{
+        width: 154px;
+
+        height: 154px;
+
+        border-radius: 50%;
+
+        background: #11131a;
+
+        display: flex;
+
+        flex-direction: column;
+
+        align-items: center;
+
+        justify-content: center;
+
+        text-align: center;
+
+        color: white;
+
+        border:
+            1px solid
+            rgba(255,255,255,.08);
+    }}
+
+    .balance {{
+        font-size: 14px;
+
+        font-weight: 800;
+
+        margin-bottom: 5px;
+    }}
+
+    .kcal-main {{
+        font-size: 25px;
+
+        font-weight: 900;
+
+        line-height: 1.05;
+    }}
+
+    .kcal-sub {{
+        color: #aeb3c2;
+
+        font-size: 11px;
+
+        margin-top: 5px;
+    }}
+
+
+    /* ---------- БЖВ ---------- */
+
+    .macros {{
+        display: flex;
+
+        justify-content: center;
+
+        gap: 8px;
+
+        flex-wrap: wrap;
+
+        margin-top: 12px;
+    }}
+
+    .macro {{
+        border-radius: 14px;
+
+        padding: 8px 11px;
+
+        background:
+            rgba(20,22,29,.92);
+
+        border:
+            1px solid
+            rgba(255,255,255,.10);
+
+        font-size: 12px;
+
+        font-weight: 700;
+    }}
+
+    .macro.p {{
+        color: #36A2EB;
+    }}
+
+    .macro.f {{
+        color: #FFCE56;
+    }}
+
+    .macro.c {{
+        color: #FF6384;
+    }}
+
+
+    /* ========================================================
+       ГОДИННИК
+       ======================================================== */
+
+    .watch-card {{
+        background:
+            rgba(18,20,27,.86);
+
+        border:
+            1px solid
+            rgba(255,255,255,.12);
+
+        border-radius: 18px;
+
+        padding: 14px;
+    }}
+
+    .watch-title {{
+        font-size: 20px;
+
+        font-weight: 900;
+
+        margin-bottom: 10px;
+    }}
+
+
+    /* ========================================================
+       ЛОГ
+       ======================================================== */
+
+    .log-card {{
+        background:
+            rgba(13,15,21,.80);
+
+        border:
+            1px solid
+            rgba(255,255,255,.13);
+
+        border-radius: 18px;
+
+        padding: 14px;
+
+        margin: 12px 0;
+    }}
+
+    .log-head {{
+        display: flex;
+
+        justify-content: space-between;
+
+        gap: 12px;
+
+        align-items: flex-start;
+    }}
+
+    .log-title {{
+        font-size: 16px;
+
+        font-weight: 800;
+
+        line-height: 1.35;
+    }}
+
+    .log-kcal {{
+        white-space: nowrap;
+
+        font-size: 17px;
+
+        font-weight: 900;
+    }}
+
+
+    /* ---------- ПРОДУКТИ ---------- */
+
+    .food-list {{
+        margin-top: 10px;
+
+        border-top:
+            1px solid
+            rgba(255,255,255,.08);
+
+        padding-top: 8px;
+    }}
+
+    .food-line {{
+        display: flex;
+
+        justify-content: space-between;
+
+        gap: 10px;
+
+        padding: 5px 0;
+
+        font-size: 13px;
+    }}
+
+    .food-name {{
+        color: #e9ebf2;
+    }}
+
+    .food-cal {{
+        color: #8fd7ff;
+
+        font-weight: 800;
+
+        white-space: nowrap;
+    }}
+
+
+    /* ---------- БЖВ В ЛОГУ ---------- */
+
+    .bju {{
+        margin-top: 9px;
+
+        display: flex;
+
+        gap: 8px;
+
+        flex-wrap: wrap;
+
+        font-size: 12px;
+
+        font-weight: 700;
+    }}
+
+    .bju span {{
+        background:
+            rgba(255,255,255,.06);
+
+        border-radius: 10px;
+
+        padding: 5px 8px;
+    }}
+
+
+    /* ---------- ДЕФІЦИТ / ПРОФІЦИТ ---------- */
+
+    .status {{
+        text-align: center;
+
+        font-weight: 900;
+
+        font-size: 20px;
+
+        padding: 15px;
+
+        border-radius: 17px;
+
+        margin: 15px 0;
+    }}
+
+    .deficit {{
+        color: #5ee89a;
+
+        background:
+            rgba(20,120,65,.30);
+
+        border:
+            1px solid
+            rgba(94,232,154,.25);
+    }}
+
+    .surplus {{
+        color: #ff7373;
+
+        background:
+            rgba(140,30,35,.30);
+
+        border:
+            1px solid
+            rgba(255,115,115,.25);
+    }}
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# SESSION STATE
+# ============================================================
+
+if "edit_mode" not in st.session_state:
+    st.session_state["edit_mode"] = False
+
+if "selected_edit" not in st.session_state:
+    st.session_state["selected_edit"] = None
+
+
+# ============================================================
+# GEMINI
+# ============================================================
+
+api_key = (
+    st.secrets.get("GEMINI_API_KEY")
+    or os.environ.get("GEMINI_API_KEY")
+)
+
+if not api_key:
+    st.error("⚠️ Не знайдено GEMINI_API_KEY.")
+    st.stop()
+
+
+client = genai.Client(api_key=api_key)
+
+# Як ти просив
+GEMINI_MODEL = "gemini-3.6-flash"
+
+
+# ============================================================
+# КОЛОНКИ EXCEL
+# ============================================================
 
 COLUMNS = [
     "Дата",
@@ -57,370 +528,24 @@ COLUMNS = [
     "Білки",
     "Жири",
     "Вуглеводи",
+    "Продукти"
 ]
 
 
-# =========================================================
-# GEMINI
-# =========================================================
-
-GEMINI_MODEL = os.environ.get(
-    "GEMINI_MODEL",
-    "gemini-3.6-flash"
-)
-
-
-# =========================================================
-# CSS
-# =========================================================
-
-st.markdown(
-    """
-    <style>
-
-    .stApp {
-        background:
-            linear-gradient(
-                rgba(0,0,0,.74),
-                rgba(0,0,0,.88)
-            ),
-            url("https://i.postimg.cc/kMS67m1J/Screenshot-20260819-175524-Facebook.jpg");
-
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
-    }
-
-    #MainMenu,
-    footer,
-    header {
-        visibility: hidden;
-    }
-
-
-    .block-container {
-        max-width: 760px;
-        padding-top: 1.2rem;
-        padding-bottom: 3rem;
-    }
-
-
-    h1,
-    h2,
-    h3,
-    p,
-    label,
-    .stMarkdown {
-        color: white !important;
-    }
-
-
-    /* =====================================================
-       КНОПКИ
-       ===================================================== */
-
-    div.stButton > button {
-
-        min-height: 48px;
-
-        border-radius: 16px;
-
-        border: 1px solid rgba(255,255,255,.18);
-
-        background:
-            linear-gradient(
-                145deg,
-                rgba(40,42,52,.98),
-                rgba(25,27,34,.98)
-            );
-
-        color: white;
-
-        font-weight: 700;
-
-        transition:
-            transform .10s ease,
-            box-shadow .10s ease,
-            background .10s ease;
-
-        box-shadow:
-            0 5px 18px rgba(0,0,0,.28);
-    }
-
-
-    div.stButton > button:hover {
-
-        border-color:
-            rgba(255,255,255,.42);
-
-        background:
-            linear-gradient(
-                145deg,
-                rgba(55,57,70,1),
-                rgba(30,32,41,1)
-            );
-
-        transform: translateY(-1px);
-    }
-
-
-    div.stButton > button:active {
-
-        transform:
-            translateY(3px)
-            scale(.975);
-
-        background:
-            linear-gradient(
-                145deg,
-                rgba(80,82,98,1),
-                rgba(48,50,62,1)
-            );
-
-        box-shadow:
-            inset 0 4px 10px rgba(0,0,0,.42);
-    }
-
-
-    div.stButton > button[kind="primary"] {
-
-        background:
-            linear-gradient(
-                135deg,
-                #246BFD,
-                #6C4DFF
-            );
-
-        border: none;
-
-        box-shadow:
-            0 7px 22px rgba(54,91,255,.32);
-    }
-
-
-    div.stButton > button[kind="primary"]:active {
-
-        background:
-            linear-gradient(
-                135deg,
-                #1d55d2,
-                #5638d7
-            );
-    }
-
-
-    /* =====================================================
-       БЛОКИ
-       ===================================================== */
-
-    .section {
-
-        background:
-            rgba(14,16,22,.76);
-
-        border:
-            1px solid rgba(255,255,255,.14);
-
-        border-radius:
-            22px;
-
-        padding:
-            18px;
-
-        margin:
-            14px 0;
-
-        box-shadow:
-            0 12px 35px rgba(0,0,0,.20);
-
-        backdrop-filter:
-            blur(8px);
-    }
-
-
-    .small-muted {
-
-        color:
-            rgba(255,255,255,.62);
-
-        font-size:
-            13px;
-    }
-
-
-    /* =====================================================
-       ЛОГ
-       ===================================================== */
-
-    .log-card {
-
-        background:
-            rgba(12,14,19,.80);
-
-        border:
-            1px solid rgba(255,255,255,.14);
-
-        border-radius:
-            20px;
-
-        padding:
-            16px;
-
-        margin:
-            12px 0;
-
-        box-shadow:
-            0 8px 24px rgba(0,0,0,.16);
-    }
-
-
-    .log-head {
-
-        display:
-            flex;
-
-        gap:
-            10px;
-
-        justify-content:
-            space-between;
-
-        align-items:
-            flex-start;
-    }
-
-
-    .log-title {
-
-        font-size:
-            17px;
-
-        font-weight:
-            750;
-
-        line-height:
-            1.35;
-
-        color:
-            #fff;
-    }
-
-
-    .log-kcal {
-
-        white-space:
-            nowrap;
-
-        font-size:
-            18px;
-
-        font-weight:
-            800;
-
-        color:
-            #72a8ff;
-    }
-
-
-    .badge {
-
-        display:
-            inline-block;
-
-        padding:
-            4px 9px;
-
-        border-radius:
-            999px;
-
-        background:
-            rgba(255,255,255,.10);
-
-        color:
-            rgba(255,255,255,.75);
-
-        font-size:
-            12px;
-
-        margin-top:
-            8px;
-    }
-
-
-    /* =====================================================
-       INPUT
-       ===================================================== */
-
-    div[data-baseweb="input"],
-    div[data-baseweb="select"] {
-
-        border-radius:
-            15px !important;
-    }
-
-
-    input,
-    textarea {
-
-        color:
-            white !important;
-    }
-
-
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-
-# =========================================================
-# SESSION STATE
-# =========================================================
-
-defaults = {
-
-    "edit_mode": False,
-
-    "input_text": "",
-
-    "editing_index": None,
-
-    "undo_stack": [],
-
-}
-
-
-for key, value in defaults.items():
-
-    if key not in st.session_state:
-
-        st.session_state[key] = value
-
-
-# =========================================================
-# ФУНКЦІЇ
-# =========================================================
-
-def default_settings():
-
-    return {
-
-        "calories": 2000,
-
-        "bmr_daily": 1850,
-
-        "initial_weight": 89.0,
-
-        # Значення годинника зберігаються окремо
-        # для кожного дня.
-        "watch_burned": {},
-
-    }
-
+# ============================================================
+# НАЛАШТУВАННЯ
+# ============================================================
 
 def load_settings():
 
-    defaults_local = default_settings()
+    default = {
+        "calories": 2000,
+        "protein": 160,
+        "fat": 70,
+        "carbs": 180,
+        "bmr_daily": 1850,
+        "initial_weight": 89.0
+    }
 
     if os.path.exists(SETTINGS_FILE):
 
@@ -434,13 +559,15 @@ def load_settings():
 
                 saved = json.load(f)
 
-            defaults_local.update(saved)
+            return {
+                **default,
+                **saved
+            }
 
         except Exception:
-
             pass
 
-    return defaults_local
+    return default
 
 
 def save_settings(settings):
@@ -459,232 +586,305 @@ def save_settings(settings):
         )
 
 
-def empty_df():
-
-    return pd.DataFrame(
-        columns=COLUMNS
-    )
-
+# ============================================================
+# ДАНІ
+# ============================================================
 
 def load_data():
 
-    if not os.path.exists(EXCEL_FILE):
+    empty = pd.DataFrame(
+        columns=COLUMNS
+    )
 
-        return empty_df()
+    if not os.path.exists(EXCEL_FILE):
+        return empty
 
     try:
 
         df = pd.read_excel(EXCEL_FILE)
 
+        for col in COLUMNS:
+
+            if col not in df.columns:
+
+                if col in [
+                    "Опис",
+                    "Тип",
+                    "Продукти"
+                ]:
+
+                    df[col] = ""
+
+                else:
+
+                    df[col] = 0
+
+        df = df[COLUMNS]
+
+        for col in [
+            "Спожито",
+            "Спалено",
+            "Білки",
+            "Жири",
+            "Вуглеводи"
+        ]:
+
+            df[col] = pd.to_numeric(
+                df[col],
+                errors="coerce"
+            ).fillna(0.0)
+
+        df["Дата"] = df["Дата"].astype(str)
+
+        df["Час"] = (
+            df["Час"]
+            .astype(str)
+            .str[:5]
+        )
+
+        df["Продукти"] = (
+            df["Продукти"]
+            .fillna("")
+            .astype(str)
+        )
+
+        return df
+
     except Exception:
 
-        return empty_df()
-
-
-    for col in COLUMNS:
-
-        if col not in df.columns:
-
-            if col in {
-                "Спожито",
-                "Спалено",
-                "Білки",
-                "Жири",
-                "Вуглеводи"
-            }:
-
-                df[col] = 0
-
-            else:
-
-                df[col] = ""
-
-
-    df = df[COLUMNS].copy()
-
-
-    df["Дата"] = (
-        df["Дата"]
-        .astype(str)
-    )
-
-
-    df["Час"] = (
-        df["Час"]
-        .astype(str)
-        .str[:5]
-    )
-
-
-    for col in [
-        "Спожито",
-        "Спалено",
-        "Білки",
-        "Жири",
-        "Вуглеводи"
-    ]:
-
-        df[col] = pd.to_numeric(
-            df[col],
-            errors="coerce"
-        ).fillna(0.0)
-
-
-    return df
+        return empty
 
 
 def save_data(df):
 
-    out = df.copy()
-
-    for col in [
-        "Спожито",
-        "Спалено",
-        "Білки",
-        "Жири",
-        "Вуглеводи"
-    ]:
-
-        out[col] = pd.to_numeric(
-            out[col],
-            errors="coerce"
-        ).fillna(0.0)
-
-
-    out.to_excel(
+    df.to_excel(
         EXCEL_FILE,
         index=False
     )
 
 
-def push_undo(df):
+# ============================================================
+# ГОДИННИК
+# ============================================================
 
-    snapshot = df.to_dict(
-        orient="records"
+def load_watch():
+
+    if not os.path.exists(WATCH_FILE):
+        return {}
+
+    try:
+
+        with open(
+            WATCH_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+
+            data = json.load(f)
+
+        return {
+            str(k): float(v)
+            for k, v in data.items()
+        }
+
+    except Exception:
+
+        return {}
+
+
+def save_watch(data):
+
+    with open(
+        WATCH_FILE,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        json.dump(
+            data,
+            f,
+            ensure_ascii=False,
+            indent=2
+        )
+
+
+# ============================================================
+# ПРОДУКТИ
+# ============================================================
+
+def parse_products(value):
+
+    if not value:
+        return []
+
+    try:
+
+        data = json.loads(value)
+
+        if isinstance(data, list):
+            return data
+
+    except Exception:
+        pass
+
+    return []
+
+
+def normalize_products(products):
+
+    result = []
+
+    if not isinstance(
+        products,
+        list
+    ):
+
+        return result
+
+    for product in products:
+
+        if not isinstance(
+            product,
+            dict
+        ):
+
+            continue
+
+        name = str(
+            product.get(
+                "name",
+                ""
+            )
+        ).strip()
+
+        kcal = float(
+            product.get(
+                "kcal",
+                0
+            ) or 0
+        )
+
+        protein = float(
+            product.get(
+                "protein",
+                0
+            ) or 0
+        )
+
+        fat = float(
+            product.get(
+                "fat",
+                0
+            ) or 0
+        )
+
+        carbs = float(
+            product.get(
+                "carbs",
+                0
+            ) or 0
+        )
+
+        if name:
+
+            result.append(
+                {
+                    "name": name,
+                    "kcal": kcal,
+                    "protein": protein,
+                    "fat": fat,
+                    "carbs": carbs
+                }
+            )
+
+    return result
+
+
+def row_products(row):
+
+    products = parse_products(
+        row.get(
+            "Продукти",
+            ""
+        )
     )
 
-    st.session_state["undo_stack"].append(
-        snapshot
-    )
+    if products:
 
-    # максимум 10 змін
-    st.session_state["undo_stack"] = (
-        st.session_state["undo_stack"][-10:]
-    )
+        return normalize_products(
+            products
+        )
 
+    if (
+        str(row.get("Тип", ""))
+        == "Їжа"
+    ):
 
-def undo_last():
+        return [
+            {
+                "name": str(
+                    row.get(
+                        "Опис",
+                        "Їжа"
+                    )
+                ),
 
-    stack = st.session_state["undo_stack"]
+                "kcal": float(
+                    row.get(
+                        "Спожито",
+                        0
+                    ) or 0
+                ),
 
-    if not stack:
+                "protein": float(
+                    row.get(
+                        "Білки",
+                        0
+                    ) or 0
+                ),
 
-        return None
+                "fat": float(
+                    row.get(
+                        "Жири",
+                        0
+                    ) or 0
+                ),
 
-    previous = stack.pop()
+                "carbs": float(
+                    row.get(
+                        "Вуглеводи",
+                        0
+                    ) or 0
+                )
+            }
+        ]
 
-    restored = pd.DataFrame(
-        previous,
-        columns=COLUMNS
-    )
-
-    if restored.empty:
-
-        restored = empty_df()
-
-    return restored
-
-
-def esc(value):
-
-    text = str(value)
-
-    return (
-        text
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("'", "&#39;")
-        .replace("\n", "<br>")
-    )
-
-
-def today_str():
-
-    return datetime.now(
-        LOCAL_TZ
-    ).strftime("%Y-%m-%d")
-
-
-def now_time():
-
-    return datetime.now(
-        LOCAL_TZ
-    ).strftime("%H:%M")
+    return []
 
 
-# =========================================================
-# РОЗРАХУНОК ДНЯ
-# =========================================================
+# ============================================================
+# BMR
+# ============================================================
 
-def day_totals(
-    df,
-    selected_date,
-    settings
+def today_bmr(
+    settings,
+    date_str
 ):
 
-    if df.empty:
-
-        day = empty_df()
-
-    else:
-
-        day = df[
-            df["Дата"].astype(str)
-            == str(selected_date)
-        ].copy()
-
-
-    consumed = (
-        float(day["Спожито"].sum())
-        if not day.empty
-        else 0.0
-    )
-
-
-    # -----------------------------------------------------
-    # ГОДИННИК
-    #
-    # ВАЖЛИВО:
-    # це НЕ додається кожного разу.
-    # Нове значення просто замінює старе.
-    # -----------------------------------------------------
-
-    watch_map = settings.get(
-        "watch_burned",
-        {}
-    )
-
-    watch_value = float(
-        watch_map.get(
-            str(selected_date),
-            0
-        ) or 0
-    )
-
-
-    bmr_daily = float(
+    daily = float(
         settings.get(
             "bmr_daily",
             1850
         )
     )
 
+    today = datetime.now(
+        LOCAL_TZ
+    ).strftime(
+        "%Y-%m-%d"
+    )
 
-    # Для сьогоднішнього дня BMR
-    # рахується пропорційно часу.
-    if str(selected_date) == today_str():
+    if str(date_str) == today:
 
         now = datetime.now(
             LOCAL_TZ
@@ -692,49 +892,99 @@ def day_totals(
 
         hours = (
             now.hour
-            +
-            now.minute / 60.0
+            + now.minute / 60
         )
 
-        bmr = (
-            bmr_daily
-            *
-            hours
-            /
-            24.0
+        return daily * min(
+            hours / 24,
+            1
         )
 
-    else:
-
-        bmr = bmr_daily
+    return daily
 
 
-    # Витрати = BMR + поточне значення годинника
-    burned = bmr + watch_value
+# ============================================================
+# РОЗРАХУНОК ДНЯ
+# ============================================================
 
+def calculate_day(
+    df,
+    date_str,
+    settings,
+    watch_burned=0
+):
 
-    # Позитивне = дефіцит
-    # Негативне = профіцит
-    balance = burned - consumed
+    day = df[
+        df["Дата"].astype(str)
+        == str(date_str)
+    ].copy()
 
+    food = day[
+        day["Тип"].astype(str)
+        == "Їжа"
+    ]
+
+    consumed = float(
+        food["Спожито"].sum()
+    )
+
+    protein = float(
+        food["Білки"].sum()
+    )
+
+    fat = float(
+        food["Жири"].sum()
+    )
+
+    carbs = float(
+        food["Вуглеводи"].sum()
+    )
+
+    exercise = float(
+        day[
+            day["Тип"].astype(str)
+            == "Тренування"
+        ]["Спалено"].sum()
+    )
+
+    watch = float(
+        watch_burned or 0
+    )
+
+    burned = (
+        today_bmr(
+            settings,
+            date_str
+        )
+        + exercise
+        + watch
+    )
+
+    balance = (
+        burned
+        - consumed
+    )
 
     return (
-        day,
         consumed,
-        bmr,
-        watch_value,
         burned,
-        balance
+        balance,
+        protein,
+        fat,
+        carbs,
+        exercise,
+        watch
     )
 
 
-# =========================================================
-# РОЗРАХУНОК ВАГИ
-# =========================================================
+# ============================================================
+# ВАГА
+# ============================================================
 
 def calculate_weight(
     df,
-    settings
+    settings,
+    watch_by_date=None
 ):
 
     initial = float(
@@ -744,632 +994,795 @@ def calculate_weight(
         )
     )
 
-
-    bmr_daily = float(
-        settings.get(
-            "bmr_daily",
-            1850
-        )
-    )
-
-
-    if df.empty:
-
+    if df.empty and not watch_by_date:
         return initial
 
+    watch_by_date = (
+        watch_by_date
+        or {}
+    )
 
-    work = df.copy()
-
-
-    work["Дата"] = (
-        work["Дата"]
+    dates = set(
+        df["Дата"]
         .astype(str)
+        .unique()
+        if not df.empty
+        else []
     )
 
-
-    work["Спожито"] = pd.to_numeric(
-        work["Спожито"],
-        errors="coerce"
-    ).fillna(0)
-
-
-    today = today_str()
-
-    now = datetime.now(
-        LOCAL_TZ
+    dates.update(
+        watch_by_date.keys()
     )
 
-
-    accumulated_balance = 0.0
-
+    total_balance = 0.0
 
     for date_str in sorted(
-        work["Дата"].unique()
+        dates
     ):
 
-        day = work[
-            work["Дата"] == date_str
-        ]
-
-
-        eaten = float(
-            day["Спожито"].sum()
-        )
-
-
-        # Годинник для конкретного дня
-        watch_burned = float(
-            settings
-            .get("watch_burned", {})
-            .get(
-                str(date_str),
+        (
+            consumed,
+            burned,
+            balance,
+            _p,
+            _f,
+            _c,
+            _exercise,
+            _watch
+        ) = calculate_day(
+            df,
+            date_str,
+            settings,
+            watch_by_date.get(
+                date_str,
                 0
             )
-            or 0
         )
 
+        total_balance += balance
 
-        if date_str == today:
-
-            elapsed_hours = (
-                now.hour
-                +
-                now.minute / 60.0
-            )
-
-            bmr = (
-                bmr_daily
-                *
-                elapsed_hours
-                /
-                24.0
-            )
-
-        else:
-
-            bmr = bmr_daily
-
-
-        total_burned = (
-            bmr
-            +
-            watch_burned
-        )
-
-
-        accumulated_balance += (
-            total_burned
-            -
-            eaten
-        )
-
-
-    # 7700 ккал ≈ 1 кг
     return max(
         0.0,
         initial
-        -
-        accumulated_balance / 7700.0
+        - total_balance / 7700.0
     )
 
 
-# =========================================================
-# GEMINI
-# =========================================================
-
-api_key = (
-    st.secrets.get("GEMINI_API_KEY")
-    or os.environ.get("GEMINI_API_KEY")
-)
-
-
-client = (
-    genai.Client(api_key=api_key)
-    if api_key
-    else None
-)
-
-
-def analyse_text(text):
-
-    if client is None:
-
-        raise RuntimeError(
-            "Не знайдено GEMINI_API_KEY "
-            "у Secrets або змінних середовища."
-        )
-
-
-    prompt = f"""
-
-Ти аналізуєш запис харчування або тренування
-для фітнес-трекера.
-
-Запис користувача:
-
-"{text}"
-
-Поверни СУВОРО JSON без markdown.
-
-Ключі:
-
-food_description
-kcal_burned
-total_consumed_kcal
-total_protein
-total_fat
-total_carbs
-
-Правила:
-
-1. Якщо це їжа:
-   total_consumed_kcal > 0
-   kcal_burned = 0
-
-2. Якщо це тренування:
-   kcal_burned > 0
-   total_consumed_kcal = 0
-
-3. Не вигадуй тренування,
-   якщо користувач описав їжу.
-
-4. Калорії мають бути числовими.
-
-5. Макроси можуть бути 0,
-   якщо їх неможливо визначити.
-
-6. food_description —
-   коротка назва всього запису.
-
-"""
-
-
-    response = client.models.generate_content(
-
-        model=GEMINI_MODEL,
-
-        contents=prompt,
-
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json"
-        ),
-    )
-
-
-    return json.loads(
-        response.text
-    )
-
-
-def add_entry_from_text(
-    text,
-    df
-):
-
-    data = analyse_text(
-        text
-    )
-
-
-    eaten = float(
-        data.get(
-            "total_consumed_kcal",
-            0
-        ) or 0
-    )
-
-
-    burned = float(
-        data.get(
-            "kcal_burned",
-            0
-        ) or 0
-    )
-
-
-    if burned > 0 and eaten <= 0:
-
-        entry_type = "Тренування"
-
-    else:
-
-        entry_type = "Їжа"
-
-        burned = 0.0
-
-
-    description = (
-        data.get(
-            "food_description"
-        )
-        or text.strip()
-        or "Запис"
-    )
-
-
-    new_row = {
-
-        "Дата":
-            today_str(),
-
-        "Час":
-            now_time(),
-
-        "Опис":
-            description,
-
-        "Тип":
-            entry_type,
-
-        "Спожито":
-            eaten,
-
-        "Спалено":
-            burned,
-
-        "Білки":
-            float(
-                data.get(
-                    "total_protein",
-                    0
-                ) or 0
-            ),
-
-        "Жири":
-            float(
-                data.get(
-                    "total_fat",
-                    0
-                ) or 0
-            ),
-
-        "Вуглеводи":
-            float(
-                data.get(
-                    "total_carbs",
-                    0
-                ) or 0
-            ),
-    }
-
-
-    return pd.concat(
-        [
-            df,
-            pd.DataFrame(
-                [new_row]
-            )
-        ],
-        ignore_index=True
-    )
-
-
-# =========================================================
+# ============================================================
 # ЗАВАНТАЖЕННЯ
-# =========================================================
+# ============================================================
 
 settings = load_settings()
 
-df_data = load_data()
+df = load_data()
 
-weight = calculate_weight(
-    df_data,
-    settings
-)
+watch_by_date = load_watch()
 
 
-# =========================================================
+# ============================================================
 # ЗАГОЛОВОК
-# =========================================================
+# ============================================================
+
+current_weight = calculate_weight(
+    df,
+    settings,
+    watch_by_date
+)
 
 st.title(
-    f"⚖️ Поточна вага: ~{weight:.1f} кг"
+    "⚖️ Мій Фітнес"
+)
+
+st.caption(
+    f"Профіль: {user_profile} "
+    f"• Поточна вага: "
+    f"~{current_weight:.1f} кг"
 )
 
 
-# =========================================================
+# ============================================================
 # ДОДАВАННЯ ЇЖІ
-# =========================================================
+# ============================================================
 
 st.markdown(
-    '<div class="section">',
-    unsafe_allow_html=True
+    "### 🍽️ Додати запис"
+)
+
+user_input = st.text_input(
+    "Що з'їв / яке тренування?",
+    placeholder=(
+        "Наприклад: "
+        "плов з куркою 350 г, "
+        "2 яйця і хліб 60 г"
+    ),
+    key="food_input"
 )
 
 
-st.subheader(
-    "🍽️ Додати запис"
-)
+col1, col2 = st.columns(2)
 
+with col1:
 
-st.text_input(
-    "Їжа / тренування",
-
-    key="input_text",
-
-    placeholder=
-        "Наприклад: 250 г плову з куркою",
-
-    label_visibility="collapsed"
-)
-
-
-col_add, col_undo = st.columns(2)
-
-
-with col_add:
-
-    add_pressed = st.button(
+    add_btn = st.button(
         "✅ Додати в лог",
-        type="primary",
+        use_container_width=True
+    )
+
+with col2:
+
+    undo_btn = st.button(
+        "↩️ Відмінити останні 10",
         use_container_width=True
     )
 
 
-with col_undo:
+# ============================================================
+# ВІДМІНА ОСТАННЬОГО
+# ============================================================
 
-    undo_pressed = st.button(
+if (
+    undo_btn
+    and not df.empty
+):
 
-        f"↩️ Відмінити "
-        f"({len(st.session_state['undo_stack'])}/10)",
-
-        use_container_width=True,
-
-        disabled=
-            not st.session_state[
-                "undo_stack"
-            ],
+    trash_rows = (
+        df.tail(10)
+        .to_dict(
+            orient="records"
+        )
     )
 
+    with open(
+        TRASH_FILE,
+        "w",
+        encoding="utf-8"
+    ) as f:
 
-# ---------------------------------------------------------
-# ДОДАТИ
-# ---------------------------------------------------------
+        json.dump(
+            trash_rows,
+            f,
+            ensure_ascii=False,
+            indent=2,
+            default=str
+        )
 
-if add_pressed:
+    df = df.iloc[:-1].copy()
+
+    save_data(df)
+
+    st.rerun()
+
+
+# ============================================================
+# GEMINI АНАЛІЗ
+# ============================================================
+
+if add_btn:
 
     text = (
-        st.session_state
-        .get("input_text", "")
-        .strip()
-    )
-
+        user_input
+        or ""
+    ).strip()
 
     if not text:
 
         st.warning(
-            "Введи їжу або тренування."
+            "Введи продукт "
+            "або тренування."
         )
 
     else:
 
+        prompt = f"""
+Ти харчовий трекер.
+
+Проаналізуй цей запис:
+
+"{text}"
+
+Поверни ТІЛЬКИ валідний JSON.
+Без markdown.
+Без ```.
+
+Формат:
+
+{{
+  "type": "Їжа" або "Тренування",
+
+  "description": "короткий опис",
+
+  "total_kcal": число,
+
+  "burned_kcal": число,
+
+  "protein": число,
+
+  "fat": число,
+
+  "carbs": число,
+
+  "products": [
+    {{
+      "name": "назва продукту",
+      "kcal": число,
+      "protein": число,
+      "fat": число,
+      "carbs": число
+    }}
+  ]
+}}
+
+ПРАВИЛА:
+
+1. Якщо це Їжа:
+   - total_kcal = сума калорій
+     усіх продуктів.
+   - products обов'язково має
+     містити кожен продукт окремо.
+   - біля кожного продукту
+     повинні бути його kcal.
+   - protein/fat/carbs =
+     загальна кількість БЖВ.
+
+2. Якщо це Тренування:
+   - total_kcal = 0.
+   - burned_kcal =
+     витрачені калорії.
+   - products = [].
+
+3. Не змішуй спожиті
+   та спалені калорії.
+
+4. Опис зроби коротким.
+"""
+
+
         try:
 
-            push_undo(
-                df_data
+            response = (
+                client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        response_mime_type="application/json"
+                    )
+                )
+            )
+
+            data = json.loads(
+                response.text
+            )
+
+            entry_type = (
+                "Тренування"
+                if str(
+                    data.get(
+                        "type",
+                        ""
+                    )
+                ).lower().startswith(
+                    "трен"
+                )
+                else "Їжа"
+            )
+
+            products = normalize_products(
+                data.get(
+                    "products",
+                    []
+                )
             )
 
 
-            df_data = add_entry_from_text(
-                text,
-                df_data
+            # ------------------------
+            # ЇЖА
+            # ------------------------
+
+            if entry_type == "Їжа":
+
+                total_kcal = (
+                    sum(
+                        p["kcal"]
+                        for p in products
+                    )
+                    if products
+                    else float(
+                        data.get(
+                            "total_kcal",
+                            0
+                        )
+                        or 0
+                    )
+                )
+
+                protein = (
+                    sum(
+                        p["protein"]
+                        for p in products
+                    )
+                    if products
+                    else float(
+                        data.get(
+                            "protein",
+                            0
+                        )
+                        or 0
+                    )
+                )
+
+                fat = (
+                    sum(
+                        p["fat"]
+                        for p in products
+                    )
+                    if products
+                    else float(
+                        data.get(
+                            "fat",
+                            0
+                        )
+                        or 0
+                    )
+                )
+
+                carbs = (
+                    sum(
+                        p["carbs"]
+                        for p in products
+                    )
+                    if products
+                    else float(
+                        data.get(
+                            "carbs",
+                            0
+                        )
+                        or 0
+                    )
+                )
+
+                burned = 0.0
+
+
+            # ------------------------
+            # ТРЕНУВАННЯ
+            # ------------------------
+
+            else:
+
+                total_kcal = 0.0
+
+                protein = 0.0
+
+                fat = 0.0
+
+                carbs = 0.0
+
+                burned = float(
+                    data.get(
+                        "burned_kcal",
+                        0
+                    )
+                    or 0
+                )
+
+
+            now = datetime.now(
+                LOCAL_TZ
             )
 
 
-            save_data(
-                df_data
+            new_row = {
+
+                "Дата":
+                    now.strftime(
+                        "%Y-%m-%d"
+                    ),
+
+                "Час":
+                    now.strftime(
+                        "%H:%M"
+                    ),
+
+                "Опис":
+                    str(
+                        data.get(
+                            "description"
+                        )
+                        or text
+                    ),
+
+                "Тип":
+                    entry_type,
+
+                "Спожито":
+                    total_kcal,
+
+                "Спалено":
+                    burned,
+
+                "Білки":
+                    protein,
+
+                "Жири":
+                    fat,
+
+                "Вуглеводи":
+                    carbs,
+
+                "Продукти":
+                    json.dumps(
+                        products,
+                        ensure_ascii=False
+                    )
+            }
+
+
+            df = pd.concat(
+                [
+                    df,
+                    pd.DataFrame(
+                        [new_row]
+                    )
+                ],
+                ignore_index=True
             )
 
 
-            # ---------------------------------------------
-            # ОЧИЩЕННЯ ПОЛЯ
-            # ---------------------------------------------
+            save_data(df)
 
+
+            # ОЧИЩАЄМО ПОЛЕ
             st.session_state[
-                "input_text"
+                "food_input"
             ] = ""
 
+
+            st.success(
+                "✅ Запис додано"
+            )
 
             st.rerun()
 
 
         except Exception as e:
 
-            if st.session_state[
-                "undo_stack"
-            ]:
-
-                st.session_state[
-                    "undo_stack"
-                ].pop()
-
-
             st.error(
-                f"Помилка обробки: {e}"
+                f"Помилка Gemini: {e}"
             )
 
 
-# ---------------------------------------------------------
-# ВІДМІНИТИ
-# ---------------------------------------------------------
+# ============================================================
+# ДНІ
+# ============================================================
 
-if undo_pressed:
-
-    restored = undo_last()
-
-    if restored is not None:
-
-        save_data(
-            restored
-        )
-
-        st.rerun()
-
-
-st.markdown(
-    "</div>",
-    unsafe_allow_html=True
+today = datetime.now(
+    LOCAL_TZ
+).strftime(
+    "%Y-%m-%d"
 )
 
 
-# =========================================================
-# ДНІ
-# =========================================================
-
-all_dates = [
-    today_str()
-]
+dates = [today]
 
 
-if not df_data.empty:
+if not df.empty:
 
-    for date_value in sorted(
-        df_data["Дата"]
+    for d in sorted(
+        df["Дата"]
         .astype(str)
         .unique(),
         reverse=True
     ):
 
-        if date_value not in all_dates:
-
-            all_dates.append(
-                date_value
-            )
+        if d not in dates:
+            dates.append(d)
 
 
 selected_date = st.selectbox(
     "📅 День",
-    all_dates
+    dates
 )
 
 
-# =========================================================
+# ============================================================
 # КАЛОРІЇ З ГОДИННИКА
-# =========================================================
-
-current_watch = float(
-
-    settings
-    .get(
-        "watch_burned",
-        {}
-    )
-    .get(
-        str(selected_date),
-        0
-    )
-    or 0
-)
-
+# ============================================================
 
 st.markdown(
-    '<div class="section">',
-    unsafe_allow_html=True
+    "### ⌚ Калорії з годинника"
 )
 
 
-st.subheader(
-    "⌚ Калорії з годинника"
+watch_key = (
+    f"watch_"
+    f"{profile_prefix}_"
+    f"{selected_date}"
 )
 
 
-watch_value = st.number_input(
+if watch_key not in st.session_state:
 
-    "Спалено за даними годинника, ккал",
-
-    min_value=0.0,
-
-    value=current_watch,
-
-    step=10.0,
-
-    key=f"watch_input_{selected_date}",
-)
-
-
-if st.button(
-    "⌚ Зберегти калорії з годинника",
-    use_container_width=True
-):
-
-    settings.setdefault(
-        "watch_burned",
-        {}
+    st.session_state[
+        watch_key
+    ] = float(
+        watch_by_date.get(
+            selected_date,
+            0
+        )
     )
 
 
-    # =====================================================
-    # ГОЛОВНЕ:
-    # ЗАМІНА, А НЕ ДОДАВАННЯ
-    # =====================================================
-
-    settings[
-        "watch_burned"
-    ][str(selected_date)] = float(
-        watch_value
-    )
-
-
-    save_settings(
-        settings
-    )
-
-
-    st.rerun()
-
-
-st.markdown(
-
-    '<div class="small-muted">'
-    'Нове число замінює попереднє, '
-    'воно не додається.'
-    '</div>',
-
-    unsafe_allow_html=True
+watch_cols = st.columns(
+    [4, 1]
 )
 
 
-st.markdown(
-    "</div>",
-    unsafe_allow_html=True
-)
+with watch_cols[0]:
 
+    watch_value = st.number_input(
+        "Спалено сьогодні, ккал",
 
-# =========================================================
-# НАЛАШТУВАННЯ / ВИДАЛЕННЯ
-# =========================================================
+        min_value=0.0,
 
-col_settings, col_delete = st.columns(2)
-
-
-with col_settings:
-
-    settings_pressed = st.button(
-
-        (
-            "⚙️ Налаштування"
-            if not st.session_state["edit_mode"]
-            else
-            "✕ Закрити налаштування"
+        value=float(
+            st.session_state[
+                watch_key
+            ]
         ),
 
+        step=10.0,
+
+        key=(
+            f"watch_input_"
+            f"{profile_prefix}_"
+            f"{selected_date}"
+        )
+    )
+
+
+with watch_cols[1]:
+
+    apply_watch = st.button(
+        "🔄",
+        key=(
+            f"watch_apply_"
+            f"{profile_prefix}_"
+            f"{selected_date}"
+        ),
         use_container_width=True
     )
 
 
-with col_delete:
+if apply_watch:
 
-    delete_pressed = st.button(
+    # ВАЖЛИВО:
+    # НОВЕ ЗНАЧЕННЯ ЗАМІНЮЄ СТАРЕ.
+    # НІЧОГО НЕ ДОДАЄМО.
 
-        "🗑️ Видалити останній",
+    st.session_state[
+        watch_key
+    ] = float(
+        watch_value
+    )
 
-        use_container_width=True,
+    watch_by_date[
+        selected_date
+    ] = float(
+        watch_value
+    )
 
-        disabled=df_data.empty
+    save_watch(
+        watch_by_date
+    )
+
+    st.rerun()
+
+
+# ============================================================
+# РОЗРАХУНОК
+# ============================================================
+
+watch_now = float(
+    st.session_state[
+        watch_key
+    ]
+)
+
+
+(
+    consumed,
+    burned,
+    balance,
+    protein,
+    fat,
+    carbs,
+    exercise,
+    watch
+) = calculate_day(
+    df,
+    selected_date,
+    settings,
+    watch_now
+)
+
+
+target = float(
+    settings["calories"]
+)
+
+
+# ============================================================
+# КРУЖОК БЖВ
+# ============================================================
+
+total_macros = (
+    protein
+    + fat
+    + carbs
+)
+
+
+if total_macros > 0:
+
+    p_deg = (
+        protein
+        / total_macros
+        * 360
+    )
+
+    f_deg = (
+        p_deg
+        + fat
+        / total_macros
+        * 360
+    )
+
+    c_deg = (
+        f_deg
+        + carbs
+        / total_macros
+        * 360
+    )
+
+    gradient = (
+        "conic-gradient("
+        f"#36A2EB 0deg {p_deg}deg, "
+        f"#FFCE56 {p_deg}deg {f_deg}deg, "
+        f"#FF6384 {f_deg}deg {c_deg}deg"
+        ")"
+    )
+
+else:
+
+    gradient = (
+        "conic-gradient("
+        "rgba(255,255,255,.14) "
+        "0deg 360deg)"
     )
 
 
-if settings_pressed:
+# ============================================================
+# ДЕФІЦИТ / ПРОФІЦИТ
+# ============================================================
+
+if balance >= 0:
+
+    balance_label = (
+        f"📉 Дефіцит: "
+        f"{abs(balance):.0f} ккал"
+    )
+
+    balance_class = "deficit"
+
+else:
+
+    balance_label = (
+        f"📈 Профіцит: "
+        f"{abs(balance):.0f} ккал"
+    )
+
+    balance_class = "surplus"
+
+
+# ============================================================
+# HTML КРУЖКА
+# ============================================================
+
+donut_html = f"""
+<div class="section">
+
+    <div class="donut-wrap">
+
+        <div
+            class="donut"
+            style="background:{gradient};"
+        >
+
+            <div class="donut-hole">
+
+                <div class="balance">
+                    {balance_label}
+                </div>
+
+                <div class="kcal-main">
+                    {consumed:.0f}
+                </div>
+
+                <div class="kcal-sub">
+                    з {target:.0f} ккал
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="macros">
+
+            <div class="macro p">
+                🥩 Білки
+                {protein:.0f}/
+                {settings["protein"]} г
+            </div>
+
+            <div class="macro f">
+                🥑 Жири
+                {fat:.0f}/
+                {settings["fat"]} г
+            </div>
+
+            <div class="macro c">
+                🍞 Вуглеводи
+                {carbs:.0f}/
+                {settings["carbs"]} г
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+"""
+
+
+st.markdown(
+    donut_html,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# СТАТУС
+# ============================================================
+
+status_text = (
+    f"📉 Дефіцит: "
+    f"{abs(balance):.0f} ккал"
+    if balance >= 0
+    else
+    f"📈 Профіцит: "
+    f"{abs(balance):.0f} ккал"
+)
+
+
+st.markdown(
+    f"""
+    <div class="status {balance_class}">
+        {status_text}
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
+# РЕДАКТОР ЦІЛЕЙ
+# ============================================================
+
+if st.button(
+    "⚙️ Редактор цілей",
+    use_container_width=True
+):
 
     st.session_state[
         "edit_mode"
@@ -1380,92 +1793,66 @@ if settings_pressed:
     st.rerun()
 
 
-if delete_pressed and not df_data.empty:
-
-    push_undo(
-        df_data
-    )
-
-
-    df_data = (
-        df_data
-        .iloc[:-1]
-        .copy()
-    )
-
-
-    save_data(
-        df_data
-    )
-
-
-    st.rerun()
-
-
-# =========================================================
-# НАЛАШТУВАННЯ
-# =========================================================
-
-if st.session_state["edit_mode"]:
+if st.session_state[
+    "edit_mode"
+]:
 
     st.markdown(
-        '<div class="section">',
-        unsafe_allow_html=True
+        "### ✏️ Редактор"
     )
 
 
-    st.subheader(
-        "⚙️ Налаштування"
-    )
-
-
-    new_calories = st.number_input(
-
-        "Добова ціль калорій",
-
-        min_value=0,
-
+    e_cal = st.number_input(
+        "Добова норма калорій",
         value=int(
-            settings.get(
-                "calories",
-                2000
-            )
+            settings["calories"]
         ),
-
-        step=50
+        step=10
     )
 
 
-    new_bmr = st.number_input(
-
-        "Добова витрата / BMR, ккал",
-
-        min_value=0,
-
+    e_prot = st.number_input(
+        "🥩 Білки, г",
         value=int(
-            settings.get(
-                "bmr_daily",
-                1850
-            )
+            settings["protein"]
         ),
-
-        step=50
+        step=5
     )
 
 
-    new_weight = st.number_input(
+    e_fat = st.number_input(
+        "🥑 Жири, г",
+        value=int(
+            settings["fat"]
+        ),
+        step=5
+    )
 
+
+    e_carb = st.number_input(
+        "🍞 Вуглеводи, г",
+        value=int(
+            settings["carbs"]
+        ),
+        step=5
+    )
+
+
+    e_bmr = st.number_input(
+        "Базові витрати BMR, ккал/добу",
+        value=int(
+            settings["bmr_daily"]
+        ),
+        step=10
+    )
+
+
+    e_weight = st.number_input(
         "Початкова вага, кг",
-
-        min_value=0.0,
-
         value=float(
-            settings.get(
-                "initial_weight",
-                89.0
-            )
+            settings["initial_weight"]
         ),
-
+        min_value=0.0,
         step=0.1
     )
 
@@ -1476,418 +1863,37 @@ if st.session_state["edit_mode"]:
         use_container_width=True
     ):
 
-        settings[
-            "calories"
-        ] = int(
-            new_calories
-        )
-
-
-        settings[
-            "bmr_daily"
-        ] = int(
-            new_bmr
-        )
-
-
-        settings[
-            "initial_weight"
-        ] = float(
-            new_weight
-        )
-
-
         save_settings(
-            settings
+            {
+                "calories": e_cal,
+                "protein": e_prot,
+                "fat": e_fat,
+                "carbs": e_carb,
+                "bmr_daily": e_bmr,
+                "initial_weight": e_weight
+            }
         )
-
 
         st.session_state[
             "edit_mode"
         ] = False
 
-
         st.rerun()
 
 
-    st.markdown(
-        "</div>",
-        unsafe_allow_html=True
-    )
-
-
-# =========================================================
-# СТАТИСТИКА
-# =========================================================
-
-(
-    day_df,
-    consumed,
-    bmr,
-    watch_burned,
-    burned,
-    balance
-) = day_totals(
-
-    df_data,
-
-    selected_date,
-
-    settings
-)
-
-
-target = max(
-    float(
-        settings.get(
-            "calories",
-            2000
-        )
-    ),
-    1.0
-)
-
-
-progress = min(
-    consumed / target,
-    1.0
-)
-
-
-# =========================================================
-# ДЕФІЦИТ / ПРОФІЦИТ
-# =========================================================
-
-if balance >= 0:
-
-    balance_label = "Дефіцит"
-
-    balance_color = "#35D07F"
-
-else:
-
-    balance_label = "Профіцит"
-
-    balance_color = "#FF5C6C"
-
-
-# =========================================================
-# КРУЖОК
-#
-# ВАЖЛИВО:
-# НЕ st.markdown()
-# НЕ HTML ТЕКСТОМ.
-#
-# components.html -> справжній HTML/CSS.
-# =========================================================
-
-donut_html = f"""
-<!doctype html>
-
-<html>
-
-<head>
-
-<meta charset="utf-8">
-
-<style>
-
-html,
-body {{
-
-    margin: 0;
-
-    padding: 0;
-
-    background: transparent;
-
-    font-family:
-        Arial,
-        sans-serif;
-}}
-
-
-.wrap {{
-
-    display: flex;
-
-    flex-direction: column;
-
-    align-items: center;
-
-    padding: 8px 0 2px;
-}}
-
-
-.ring {{
-
-    width: 210px;
-
-    height: 210px;
-
-    border-radius: 50%;
-
-    background:
-
-        conic-gradient(
-
-            #36A2EB
-
-            0deg
-
-            {progress * 360:.2f}deg,
-
-            rgba(255,255,255,.10)
-
-            {progress * 360:.2f}deg
-
-            360deg
-        );
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    box-shadow:
-        0 0 30px
-        rgba(0,0,0,.45);
-}}
-
-
-.hole {{
-
-    width: 154px;
-
-    height: 154px;
-
-    border-radius: 50%;
-
-    background:
-        #15171e;
-
-    display: flex;
-
-    flex-direction: column;
-
-    align-items: center;
-
-    justify-content: center;
-
-    text-align: center;
-
-    color: white;
-}}
-
-
-.balance {{
-
-    font-size: 16px;
-
-    font-weight: 800;
-
-    color: {balance_color};
-
-    margin-bottom: 7px;
-}}
-
-
-.main {{
-
-    font-size: 28px;
-
-    font-weight: 900;
-}}
-
-
-.sub {{
-
-    font-size: 12px;
-
-    color:
-        rgba(255,255,255,.62);
-
-    margin-top: 4px;
-}}
-
-
-.stats {{
-
-    width:
-        min(390px, 92vw);
-
-    display: flex;
-
-    gap: 8px;
-
-    margin-top: 13px;
-}}
-
-
-.stat {{
-
-    flex: 1;
-
-    background:
-        rgba(20,22,28,.88);
-
-    border:
-        1px solid
-        rgba(255,255,255,.12);
-
-    border-radius: 13px;
-
-    padding: 10px 5px;
-
-    text-align: center;
-
-    color: white;
-}}
-
-
-.n {{
-
-    font-size: 17px;
-
-    font-weight: 800;
-}}
-
-
-.l {{
-
-    color:
-        rgba(255,255,255,.60);
-
-    font-size: 11px;
-
-    margin-top: 3px;
-}}
-
-</style>
-
-</head>
-
-
-<body>
-
-<div class="wrap">
-
-
-    <div class="ring">
-
-        <div class="hole">
-
-            <div class="balance">
-
-                {balance_label}:
-                {abs(balance):.0f} ккал
-
-            </div>
-
-
-            <div class="main">
-
-                {consumed:.0f}
-
-            </div>
-
-
-            <div class="sub">
-
-                з'їдено з
-                {target:.0f}
-                ккал
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <div class="stats">
-
-
-        <div class="stat">
-
-            <div class="n">
-
-                {bmr:.0f}
-
-            </div>
-
-            <div class="l">
-
-                Добова витрата
-
-            </div>
-
-        </div>
-
-
-        <div class="stat">
-
-            <div class="n">
-
-                {consumed:.0f}
-
-            </div>
-
-            <div class="l">
-
-                З'їдено
-
-            </div>
-
-        </div>
-
-
-        <div class="stat">
-
-            <div class="n">
-
-                {watch_burned:.0f}
-
-            </div>
-
-            <div class="l">
-
-                Годинник
-
-            </div>
-
-        </div>
-
-
-    </div>
-
-
-</div>
-
-</body>
-
-</html>
-"""
-
-
-st.components.v1.html(
-
-    donut_html,
-
-    height=290,
-
-    scrolling=False
-)
-
-
-# =========================================================
+# ============================================================
 # ЛОГ
-# =========================================================
+# ============================================================
 
-st.subheader(
-    f"📝 Лог за {selected_date}"
+st.markdown(
+    f"### 📝 Влог за {selected_date}"
 )
+
+
+day_df = df[
+    df["Дата"].astype(str)
+    == str(selected_date)
+].copy()
 
 
 if day_df.empty:
@@ -1899,415 +1905,385 @@ if day_df.empty:
 
 else:
 
-    display_df = day_df.copy()
+    # Нові записи зверху
+    for idx, row in day_df.iloc[::-1].iterrows():
 
-
-    display_df["_order"] = range(
-        len(display_df)
-    )
-
-
-    display_df = (
-        display_df
-        .sort_values(
-            [
-                "Час",
-                "_order"
-            ],
-            ascending=[
-                False,
-                False
-            ]
-        )
-    )
-
-
-    for row_index, (_, row) in enumerate(
-        display_df.iterrows()
-    ):
-
-        row_id = (
-            f"{selected_date}_{row_index}"
+        entry_type = str(
+            row["Тип"]
         )
 
 
-        is_training = (
-            str(row["Тип"])
-            ==
-            "Тренування"
-        )
+        if entry_type == "Їжа":
 
+            icon = "🍽️"
 
-        icon = (
-            "💪"
-            if is_training
-            else
-            "🍽️"
-        )
-
-
-        if is_training:
-
-            kcal_text = (
-                f"-"
-                f"{float(row['Спалено']):.0f}"
-                f" ккал"
+            kcal = float(
+                row["Спожито"]
             )
 
         else:
 
-            kcal_text = (
-                f"+"
-                f"{float(row['Спожито']):.0f}"
-                f" ккал"
+            icon = "💪"
+
+            kcal = float(
+                row["Спалено"]
             )
 
 
-        # -------------------------------------------------
-        # КАРТКА ЗАПИСУ
-        # -------------------------------------------------
-
-        st.markdown(
-
-            f"""
-            <div class="log-card">
-
-                <div class="log-head">
-
-                    <div>
-
-                        <div class="log-title">
-
-                            {esc(
-                                str(row["Час"])[:5]
-                            )}
-
-                            {icon}
-
-                            {esc(
-                                row["Опис"]
-                            )}
-
-                        </div>
+        products = row_products(
+            row
+        )
 
 
-                        <div class="badge">
+        # ----------------------------------------------------
+        # ПРОДУКТИ
+        # ----------------------------------------------------
 
-                            {esc(
-                                str(row["Тип"])
-                            )}
-
-                        </div>
-
-                    </div>
+        food_lines = ""
 
 
-                    <div class="log-kcal">
+        if (
+            entry_type == "Їжа"
+            and products
+        ):
 
-                        {kcal_text}
+            food_lines = (
+                '<div class="food-list">'
+            )
 
-                    </div>
+
+            for product in products:
+
+                food_lines += f"""
+                <div class="food-line">
+
+                    <span class="food-name">
+                        🍴 {product["name"]}
+                    </span>
+
+                    <span class="food-cal">
+                        {product["kcal"]:.0f} ккал
+                    </span>
+
+                </div>
+                """
+
+
+            food_lines += (
+                "</div>"
+            )
+
+
+        # ----------------------------------------------------
+        # БЖВ
+        # ----------------------------------------------------
+
+        bju = ""
+
+
+        if entry_type == "Їжа":
+
+            bju = f"""
+            <div class="bju">
+
+                <span>
+                    🥩
+                    {float(row["Білки"]):.0f} г
+                </span>
+
+                <span>
+                    🥑
+                    {float(row["Жири"]):.0f} г
+                </span>
+
+                <span>
+                    🍞
+                    {float(row["Вуглеводи"]):.0f} г
+                </span>
+
+            </div>
+            """
+
+
+        # ----------------------------------------------------
+        # КАРТКА ЛОГУ
+        # ----------------------------------------------------
+
+        html = f"""
+        <div class="log-card">
+
+            <div class="log-head">
+
+                <div class="log-title">
+
+                    {str(row["Час"])[:5]}
+                    {icon}
+                    {str(row["Опис"])}
+
+                </div>
+
+
+                <div class="log-kcal">
+
+                    {kcal:+.0f} ккал
 
                 </div>
 
             </div>
-            """,
 
+            {food_lines}
+
+            {bju}
+
+        </div>
+        """
+
+
+        st.markdown(
+            html,
             unsafe_allow_html=True
         )
 
 
-        # -------------------------------------------------
-        # РЕДАГУВАННЯ
-        # -------------------------------------------------
-
-        edit_key = (
-            f"edit_{row_id}"
-        )
-
+        # ----------------------------------------------------
+        # КНОПКА РЕДАГУВАННЯ
+        # ----------------------------------------------------
 
         if st.button(
-
             "✏️ Редагувати",
-
-            key=edit_key,
-
+            key=f"edit_{idx}",
             use_container_width=True
         ):
 
+            st.session_state[
+                "selected_edit"
+            ] = int(idx)
 
-            matches = df_data[
-
-                (
-                    df_data["Дата"]
-                    .astype(str)
-                    ==
-                    str(row["Дата"])
-                )
-
-                &
-
-                (
-                    df_data["Час"]
-                    .astype(str)
-                    .str[:5]
-                    ==
-                    str(row["Час"])[:5]
-                )
-
-                &
-
-                (
-                    df_data["Опис"]
-                    .astype(str)
-                    ==
-                    str(row["Опис"])
-                )
-
-            ].index.tolist()
+            st.rerun()
 
 
-            if matches:
-
-                st.session_state[
-                    "editing_index"
-                ] = matches[-1]
-
-
-                st.rerun()
-
-
-        # -------------------------------------------------
-        # ФОРМА РЕДАГУВАННЯ
-        # -------------------------------------------------
+        # ----------------------------------------------------
+        # РЕДАКТОР ЗАПИСУ
+        # ----------------------------------------------------
 
         if (
-            st.session_state.get(
-                "editing_index"
-            )
-            is not None
+            st.session_state[
+                "selected_edit"
+            ]
+            == int(idx)
         ):
 
-            edit_idx = (
-                st.session_state[
-                    "editing_index"
-                ]
+            st.markdown(
+                "**✏️ Редагування запису**"
             )
 
 
-            if (
-                edit_idx in df_data.index
-                and
-                str(
-                    df_data.loc[
-                        edit_idx,
-                        "Дата"
-                    ]
-                )
-                ==
-                str(selected_date)
-            ):
+            edit_desc = st.text_input(
+                "Опис",
+
+                value=str(
+                    row["Опис"]
+                ),
+
+                key=f"desc_{idx}"
+            )
 
 
-                st.markdown(
-                    '<div class="section">',
-                    unsafe_allow_html=True
-                )
+            edit_kcal = st.number_input(
+                "Калорії",
+
+                value=float(
+                    row["Спожито"]
+                    if entry_type == "Їжа"
+                    else row["Спалено"]
+                ),
+
+                min_value=0.0,
+
+                step=1.0,
+
+                key=f"kcal_{idx}"
+            )
 
 
-                st.markdown(
-                    "### ✏️ Редагування запису"
-                )
+            ec1, ec2, ec3 = st.columns(3)
 
 
-                edit_description = st.text_input(
+            with ec1:
 
-                    "Опис",
+                edit_p = st.number_input(
+                    "🥩 Білки",
 
-                    value=str(
-                        df_data.loc[
-                            edit_idx,
-                            "Опис"
-                        ]
+                    value=float(
+                        row["Білки"]
                     ),
-
-                    key=
-                        f"desc_{edit_idx}"
-                )
-
-
-                # Для їжі редагуємо спожиті ккал.
-                # Для тренування — спалені.
-                if (
-                    str(
-                        df_data.loc[
-                            edit_idx,
-                            "Тип"
-                        ]
-                    )
-                    ==
-                    "Тренування"
-                ):
-
-                    initial_kcal = float(
-                        df_data.loc[
-                            edit_idx,
-                            "Спалено"
-                        ]
-                    )
-
-                else:
-
-                    initial_kcal = float(
-                        df_data.loc[
-                            edit_idx,
-                            "Спожито"
-                        ]
-                    )
-
-
-                edit_kcal = st.number_input(
-
-                    "Калорії",
 
                     min_value=0.0,
 
-                    value=initial_kcal,
+                    step=1.0,
+
+                    key=f"p_{idx}"
+                )
+
+
+            with ec2:
+
+                edit_f = st.number_input(
+                    "🥑 Жири",
+
+                    value=float(
+                        row["Жири"]
+                    ),
+
+                    min_value=0.0,
 
                     step=1.0,
 
-                    key=
-                        f"kcal_{edit_idx}"
+                    key=f"f_{idx}"
                 )
 
 
-                c1, c2 = st.columns(2)
+            with ec3:
 
+                edit_c = st.number_input(
+                    "🍞 Вуглеводи",
 
-                with c1:
+                    value=float(
+                        row["Вуглеводи"]
+                    ),
 
-                    if st.button(
+                    min_value=0.0,
 
-                        "💾 Зберегти зміни",
+                    step=1.0,
 
-                        key=
-                            f"save_edit_{edit_idx}",
-
-                        type="primary",
-
-                        use_container_width=True
-                    ):
-
-                        push_undo(
-                            df_data
-                        )
-
-
-                        df_data.loc[
-                            edit_idx,
-                            "Опис"
-                        ] = (
-                            edit_description
-                        )
-
-
-                        if (
-                            str(
-                                df_data.loc[
-                                    edit_idx,
-                                    "Тип"
-                                ]
-                            )
-                            ==
-                            "Тренування"
-                        ):
-
-                            df_data.loc[
-                                edit_idx,
-                                "Спалено"
-                            ] = (
-                                edit_kcal
-                            )
-
-                        else:
-
-                            df_data.loc[
-                                edit_idx,
-                                "Спожито"
-                            ] = (
-                                edit_kcal
-                            )
-
-
-                        # ---------------------------------
-                        # Після зміни все автоматично
-                        # перераховується при rerun.
-                        # ---------------------------------
-
-                        save_data(
-                            df_data
-                        )
-
-
-                        st.session_state[
-                            "editing_index"
-                        ] = None
-
-
-                        st.rerun()
-
-
-                with c2:
-
-                    if st.button(
-
-                        "✕ Скасувати",
-
-                        key=
-                            f"cancel_edit_{edit_idx}",
-
-                        use_container_width=True
-                    ):
-
-                        st.session_state[
-                            "editing_index"
-                        ] = None
-
-
-                        st.rerun()
-
-
-                st.markdown(
-                    "</div>",
-                    unsafe_allow_html=True
+                    key=f"c_{idx}"
                 )
 
 
-# =========================================================
+            s1, s2 = st.columns(2)
+
+
+            with s1:
+
+                if st.button(
+                    "💾 Застосувати",
+
+                    key=f"save_edit_{idx}",
+
+                    type="primary",
+
+                    use_container_width=True
+                ):
+
+                    df.loc[
+                        idx,
+                        "Опис"
+                    ] = edit_desc
+
+
+                    if entry_type == "Їжа":
+
+                        df.loc[
+                            idx,
+                            "Спожито"
+                        ] = edit_kcal
+
+                        df.loc[
+                            idx,
+                            "Спалено"
+                        ] = 0
+
+
+                    else:
+
+                        df.loc[
+                            idx,
+                            "Спожито"
+                        ] = 0
+
+                        df.loc[
+                            idx,
+                            "Спалено"
+                        ] = edit_kcal
+
+
+                    df.loc[
+                        idx,
+                        "Білки"
+                    ] = edit_p
+
+
+                    df.loc[
+                        idx,
+                        "Жири"
+                    ] = edit_f
+
+
+                    df.loc[
+                        idx,
+                        "Вуглеводи"
+                    ] = edit_c
+
+
+                    save_data(df)
+
+
+                    st.session_state[
+                        "selected_edit"
+                    ] = None
+
+
+                    st.rerun()
+
+
+            with s2:
+
+                if st.button(
+                    "✖️ Скасувати",
+
+                    key=f"cancel_edit_{idx}",
+
+                    use_container_width=True
+                ):
+
+                    st.session_state[
+                        "selected_edit"
+                    ] = None
+
+                    st.rerun()
+
+
+# ============================================================
 # ПІДСУМОК
-# =========================================================
+# ============================================================
 
-st.divider()
-
-
-if balance >= 0:
-
-    st.success(
-        f"📉 Дефіцит: {balance:.0f} ккал"
-    )
-
-else:
-
-    st.error(
-        f"📈 Профіцит: {abs(balance):.0f} ккал"
-    )
-
-
-st.caption(
-
-    f"⚖️ Орієнтир: "
-    f"7700 ккал накопиченого дефіциту "
-    f"≈ 1 кг. "
-    f"Поточна розрахункова вага: "
-    f"~{weight:.1f} кг."
+st.markdown(
+    "### 📊 Підсумок"
 )
+
+
+c1, c2, c3 = st.columns(3)
+
+
+with c1:
+
+    st.metric(
+        "🍽️ З'їдено",
+        f"{consumed:.0f} ккал"
+    )
+
+
+with c2:
+
+    st.metric(
+        "🔥 Витрачено",
+        f"{burned:.0f} ккал"
+    )
+
+
+with c3:
+
+    st.metric(
+        "⌚ Годинник",
+        f"{watch:.0f} ккал"
+    )
