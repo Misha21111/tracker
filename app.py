@@ -1451,13 +1451,8 @@ if not day_df.empty:
     # ========================================================
 
     st.markdown(
-        f"""
-        **📅 {selected_date}**
-
-        ⚖️ **Вага (розрахункова): "
-        f"{current_weight:.1f} кг** "
-        f"({weight_change_text} від початкової)
-        """
+        f"**📅 {selected_date}**\n\n"
+        f"⚖️ **Вага (розрахункова): {current_weight:.1f} кг** ({weight_change_text} від початкової)"
     )
 
 
