@@ -1,4 +1,4 @@
-  st.markdown(
+    st.markdown(
         f"""
         <div class="donut-container">
             <div class="donut-ring" style="background: conic-gradient(#36A2EB 0deg {p_deg}deg, #FFCE56 {p_deg}deg {f_deg}deg, #FF6384 {f_deg}deg {c_deg}deg);">
@@ -15,5 +15,5 @@
             </div>
         </div>
         """,
-        unsafe_allow_html=True # <--- ДОДАЙТЕ ЦЕ
+        unsafe_allow_html=True
     )
