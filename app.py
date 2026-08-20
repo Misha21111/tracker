@@ -30,7 +30,6 @@ st.set_page_config(page_title="Мій Фітнес", page_icon="⚖️", layout=
 # ПРОФІЛЬ ТА ФАЙЛИ
 # ============================================================
 
-# Унікальний key виправляє помилку StreamlitDuplicateElementId
 user_profile = st.sidebar.selectbox(
     "👤 Профіль", ["Я", "Дружина"], key="user_profile_select"
 )
@@ -64,10 +63,7 @@ st.markdown(
             url("{IMAGE_URL}") center / cover fixed;
     }}
 
-  #MainMenu, footer {{ visibility: hidden; }}
-
-        visibility: hidden;
-    }}
+    #MainMenu, footer {{ visibility: hidden; }}
 
     .block-container {{
         max-width: 760px;
@@ -474,7 +470,6 @@ def calculate_day(df, date_str, settings, watch_burned=0):
 
 
 def calculate_weight(df, settings, watch_dict):
-  """Розрахунок динамічної ваги на основі 7700 ккал = 1 кг"""
   start_w = float(settings.get("start_weight", 91.8))
   if df.empty and not watch_dict:
     return start_w
@@ -720,7 +715,6 @@ else:
   balance_label = f"📈 Профіцит: {abs(balance):.0f} ккал"
   balance_class = "surplus"
 
-# Вага додана всередину кружечка (div class="weight-display")
 donut_html = (
     f'<div class="section"><div class="donut-wrap"><div class="donut"'
     f' style="background:{gradient};"><div class="donut-hole"><div'
@@ -746,6 +740,39 @@ st.markdown(
     "</div>",
     unsafe_allow_html=True,
 )
+
+
+# ============================================================
+# AI ПІДКАЗКА: ЩО ДОЇСТИ ДО НОРМИ
+# ============================================================
+
+rem_kcal = max(0.0, target - consumed)
+rem_p = max(0.0, float(settings["protein"]) - protein)
+rem_f = max(0.0, float(settings["fat"]) - fat)
+rem_c = max(0.0, float(settings["carbs"]) - carbs)
+
+if rem_kcal > 50:
+  if st.button("💡 Що доїсти до норми?", use_container_width=True):
+    with st.spinner("Шукаю підходящі варіанти..."):
+      prompt_advice = f"""
+            Ти спортивний дієтолог. Користувачу за день залишилося добрати:
+            - Калорії: {rem_kcal:.0f} ккал
+            - Білки: {rem_p:.0f} г
+            - Жири: {rem_f:.0f} г
+            - Вуглеводи: {rem_c:.0f} г
+
+            Запропонуй 2-3 конкретні й прості варіанти продуктів (з вказівкою назви та ваги в грамах), щоб закрити саме цей залишок БЖВ.
+            Відповідь надай коротко, маркованим списком.
+            """
+      try:
+        res_advice = client.models.generate_content(
+            model=GEMINI_MODEL, contents=prompt_advice
+        )
+        st.info(res_advice.text)
+      except Exception as e:
+        st.error(f"Помилка отримання підказки: {e}")
+else:
+  st.success("🎉 Денну норму калорій уже закрито!")
 
 
 # ============================================================
