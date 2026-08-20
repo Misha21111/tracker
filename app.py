@@ -1,4 +1,4 @@
-Import pandas as pd
+import pandas as pd
 import streamlit as st
 from datetime import datetime, timedelta, timezone
 import json
@@ -30,7 +30,7 @@ st.markdown(
     <style>
     .stApp {{ background-image: linear-gradient(rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.85)), url("{IMAGE_URL}"); background-size: cover; background-position: center; background-attachment: fixed; }}
     #MainMenu, footer, header {{visibility: hidden;}}
-    
+
     div[data-testid="stMetric"], div[data-testid="stMarkdownContainer"], div[data-testid="stVerticalBlockBorderWrapper"] {{ background-color: rgba(20, 20, 20, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 10px 14px; color: white; }}
     .food-box, .advice-box {{ background-color: rgba(20, 20, 20, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 12px 16px; color: #ffffff; margin-top: 10px; }}
     .advice-box {{ border-left: 4px solid #36A2EB; }}
@@ -60,7 +60,8 @@ st.markdown(
         color: #36A2EB;
     }}
     </style>
-    """, unsafe_allow_html=True,
+    """,
+    unsafe_allow_html=True,
 )
 
 if "show_advice" not in st.session_state:
@@ -869,4 +870,3 @@ else:
     st.info(
         f"За цей день ({selected_date}) ще немає записів."
     )
-Дивись з першого разу наптсав гпт код
