@@ -75,7 +75,15 @@ if not api_key:
 client = genai.Client(api_key=api_key)
 
 def load_settings():
-    default = {"calories": 2000, "protein": 160, "fat": 70, "carbs": 180, "bmr_daily": 1850}
+    default = {
+        "calories": 2000, 
+        "protein": 160, 
+        "fat": 70, 
+        "carbs": 180, 
+        "bmr_daily": 1850,
+        "activity_level": "Сидячий",
+        "include_exercise_in_deficit": False
+    }
     if os.path.exists(SETTINGS_FILE):
         try:
             with open(SETTINGS_FILE, "r") as f: return {**default, **json.load(f)}
@@ -205,14 +213,29 @@ if btn_back and has_trash:
 if st.session_state["edit_mode"]:
     with st.container(border=True):
         st.subheader(f"Налаштування профілю: {user_profile}")
-        e_cal = st.number_input("Ціль калорій", value=int(user_settings["calories"]), step=10)
+        e_cal = st.number_input("Загальний добовий ліміт споживання (ккал)", value=int(user_settings["calories"]), step=10)
         e_prot = st.number_input("Ціль білків (г)", value=int(user_settings["protein"]), step=5)
         e_fat = st.number_input("Ціль жирів (г)", value=int(user_settings["fat"]), step=5)
         e_carb = st.number_input("Ціль вуглеводів (г)", value=int(user_settings["carbs"]), step=5)
         e_weight = st.number_input("Актуальна вага (кг)", value=float(w_data.get("current_weight", 70.0)), step=0.1)
         
+        activity_options = ["Сидячий", "Помірний", "Активний"]
+        current_act = user_settings.get("activity_level", "Сидячий")
+        act_index = activity_options.index(current_act) if current_act in activity_options else 0
+        e_activity = st.selectbox("Рівень активності", activity_options, index=act_index)
+        
+        e_inc_ex = st.checkbox("Враховувати вправи в дефіцит", value=user_settings.get("include_exercise_in_deficit", False))
+        
         if st.button("💾 Зберегти зміни", type="primary", use_container_width=True):
-            save_settings({"calories": e_cal, "protein": e_prot, "fat": e_fat, "carbs": e_carb, "bmr_daily": user_settings.get("bmr_daily", 1850)})
+            save_settings({
+                "calories": e_cal, 
+                "protein": e_prot, 
+                "fat": e_fat, 
+                "carbs": e_carb, 
+                "bmr_daily": user_settings.get("bmr_daily", 1850),
+                "activity_level": e_activity,
+                "include_exercise_in_deficit": e_inc_ex
+            })
             save_weight({"current_weight": e_weight})
             st.session_state["edit_mode"] = False
             st.rerun()
@@ -228,9 +251,15 @@ if not day_df.empty:
     bmr_total = user_settings.get("bmr_daily", 1850)
     if selected_date == today_str:
         hours_passed = now.hour + now.minute / 60
-        total_burned = explicit_burned + (bmr_total / 24) * hours_passed
+        base_burned = (bmr_total / 24) * hours_passed
     else:
-        total_burned = explicit_burned + bmr_total
+        base_burned = bmr_total
+
+    # Враховуємо вправи в дефіцит лише якщо увімкнено в налаштуваннях
+    if user_settings.get("include_exercise_in_deficit", False):
+        total_burned = explicit_burned + base_burned
+    else:
+        total_burned = base_burned
 
     target_cal = user_settings["calories"]
     target_p = user_settings["protein"]
