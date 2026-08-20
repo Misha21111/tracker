@@ -351,6 +351,8 @@ def load_data():
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
         df["Дата"] = df["Дата"].astype(str)
         df["Час"] = df["Час"].astype(str).str[:5]
+        df["Опис"] = df["Опис"].fillna("").astype(str)
+        df["Тип"] = df["Тип"].fillna("Їжа").astype(str)
         df["Продукти"] = df["Продукти"].fillna("").astype(str)
         return df
     except Exception:
@@ -397,8 +399,11 @@ def row_products(row):
     except Exception:
         pass
     if str(row.get("Тип", "")) == "Їжа":
+        desc = str(row.get("Опис", "")).strip()
+        if not desc or desc.lower() == "nan":
+            desc = "Їжа"
         return [{
-            "name": str(row.get("Опис", "Їжа")),
+            "name": desc,
             "kcal": float(row.get("Спожито", 0) or 0),
             "protein": float(row.get("Білки", 0) or 0),
             "fat": float(row.get("Жири", 0) or 0),
@@ -625,24 +630,7 @@ else:
     balance_label = f"📈 Профіцит: {abs(balance):.0f} ккал"
     balance_class = "surplus"
 
-donut_html = f"""
-<div class="section">
-    <div class="donut-wrap">
-        <div class="donut" style="background:{gradient};">
-            <div class="donut-hole">
-                <div class="balance">{balance_label}</div>
-                <div class="kcal-main">{consumed:.0f}</div>
-                <div class="kcal-sub">з {target:.0f} ккал</div>
-            </div>
-        </div>
-        <div class="macros">
-            <div class="macro p">🥩 Білки {protein:.0f}/{settings["protein"]} г</div>
-            <div class="macro f">🥑 Жири {fat:.0f}/{settings["fat"]} г</div>
-            <div class="macro c">🍞 Вуглеводи {carbs:.0f}/{settings["carbs"]} г</div>
-        </div>
-    </div>
-</div>
-"""
+donut_html = f"""<div class="section"><div class="donut-wrap"><div class="donut" style="background:{gradient};"><div class="donut-hole"><div class="balance">{balance_label}</div><div class="kcal-main">{consumed:.0f}</div><div class="kcal-sub">з {target:.0f} ккал</div></div></div><div class="macros"><div class="macro p">🥩 Білки {protein:.0f}/{settings["protein"]} г</div><div class="macro f">🥑 Жири {fat:.0f}/{settings["fat"]} г</div><div class="macro c">🍞 Вуглеводи {carbs:.0f}/{settings["carbs"]} г</div></div></div></div>"""
 st.markdown(donut_html, unsafe_allow_html=True)
 
 st.markdown(
@@ -697,38 +685,20 @@ else:
         kcal = float(row["Спожито"] if entry_type == "Їжа" else row["Спалено"])
         products = row_products(row)
 
+        desc = str(row["Опис"]).strip()
+        if not desc or desc.lower() == "nan":
+            desc = "Тренування" if entry_type == "Тренування" else "Прийом їжі"
+
         food_lines = ""
         if entry_type == "Їжа" and products:
-            food_lines = '<div class="food-list">'
-            for p in products:
-                food_lines += f"""
-                <div class="food-line">
-                    <span class="food-name">🍴 {p["name"]}</span>
-                    <span class="food-cal">{p["kcal"]:.0f} ккал</span>
-                </div>
-                """
-            food_lines += '</div>'
+            p_items = "".join([f'<div class="food-line"><span class="food-name">🍴 {p["name"]}</span><span class="food-cal">{p["kcal"]:.0f} ккал</span></div>' for p in products])
+            food_lines = f'<div class="food-list">{p_items}</div>'
 
         bju = ""
         if entry_type == "Їжа":
-            bju = f"""
-            <div class="bju">
-                <span>🥩 {float(row["Білки"]):.0f} г</span>
-                <span>🥑 {float(row["Жири"]):.0f} г</span>
-                <span>🍞 {float(row["Вуглеводи"]):.0f} г</span>
-            </div>
-            """
+            bju = f'<div class="bju"><span>🥩 {float(row["Білки"]):.0f} г</span><span>🥑 {float(row["Жири"]):.0f} г</span><span>🍞 {float(row["Вуглеводи"]):.0f} г</span></div>'
 
-        html = f"""
-        <div class="log-card">
-            <div class="log-head">
-                <div class="log-title">{str(row["Час"])[:5]} {icon} {str(row["Опис"])}</div>
-                <div class="log-kcal">{kcal:+.0f} ккал</div>
-            </div>
-            {food_lines}
-            {bju}
-        </div>
-        """
+        html = f'<div class="log-card"><div class="log-head"><div class="log-title">{str(row["Час"])[:5]} {icon} {desc}</div><div class="log-kcal">{kcal:+.0f} ккал</div></div>{food_lines}{bju}</div>'
         st.markdown(html, unsafe_allow_html=True)
 
         if st.button("✏️ Редагувати", key=f"edit_{idx}", use_container_width=True):
@@ -737,7 +707,7 @@ else:
 
         if st.session_state["selected_edit"] == int(idx):
             st.markdown("**✏️ Редагування запису**")
-            edit_desc = st.text_input("Опис", value=str(row["Опис"]), key=f"desc_{idx}")
+            edit_desc = st.text_input("Опис", value=desc, key=f"desc_{idx}")
             edit_kcal = st.number_input(
                 "Калорії",
                 value=float(row["Спожито"] if entry_type == "Їжа" else row["Спалено"]),
