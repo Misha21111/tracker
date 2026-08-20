@@ -1,4 +1,4 @@
-
+# Обмежуємо кути, щоб conic-gradient завжди був коректним
 p_deg = max(0, min(360, p_deg))
 f_deg = max(p_deg, min(360, f_deg))
 c_deg = max(f_deg, min(360, c_deg))
