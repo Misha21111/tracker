@@ -14,6 +14,15 @@ except ImportError:
 
 st.set_page_config(page_title="Мій Фітнес", layout="centered")
 
+# --- ВИБІР ПРОФІЛЮ ---
+user_profile = st.sidebar.selectbox("👤 Оберіть профіль:", ["Я", "Дружина"])
+profile_prefix = "user1" if user_profile == "Я" else "user2"
+
+EXCEL_FILE = f"fitness_entries_{profile_prefix}.xlsx"
+WEIGHT_FILE = f"weight_data_{profile_prefix}.json"
+SETTINGS_FILE = f"user_settings_{profile_prefix}.json"
+TRASH_FILE = f"fitness_trash_{profile_prefix}.json"
+
 IMAGE_URL = "https://i.postimg.cc/kMS67m1J/Screenshot-20260819-175524-Facebook.jpg"
 
 st.markdown(
@@ -33,16 +42,15 @@ st.markdown(
     .log-item {{
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-start;
         border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        padding: 6px 0;
+        padding: 8px 0;
         font-size: 14px;
     }}
     .log-item:last-child {{ border-bottom: none; }}
     .log-left {{
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        word-break: break-word;
+        overflow-wrap: break-word;
         margin-right: 10px;
         flex-grow: 1;
     }}
@@ -55,14 +63,10 @@ st.markdown(
     """, unsafe_allow_html=True,
 )
 
-EXCEL_FILE = "fitness_entries.xlsx"
-WEIGHT_FILE = "weight_data.json"
-SETTINGS_FILE = "user_settings.json"
-TRASH_FILE = "fitness_trash.json"
-
 if "show_advice" not in st.session_state: st.session_state["show_advice"] = False
 if "edit_mode" not in st.session_state: st.session_state["edit_mode"] = False
 if "open_camera" not in st.session_state: st.session_state["open_camera"] = False
+if "edit_log_mode" not in st.session_state: st.session_state["edit_log_mode"] = False
 
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 if not api_key: 
@@ -86,7 +90,7 @@ def load_weight():
         try:
             with open(WEIGHT_FILE, "r") as f: return json.load(f)
         except: pass
-    return {"current_weight": 89.0}
+    return {"current_weight": 70.0}
 
 def save_weight(w):
     with open(WEIGHT_FILE, "w") as f: json.dump(w, f)
@@ -105,7 +109,7 @@ user_settings = load_settings()
 w_data = load_weight()
 df_data = load_data()
 
-st.title("🏋️ Мій фітнес")
+st.title(f"🏋️ Фітнес: {user_profile}")
 
 with st.container(border=True):
     user_input = st.text_input("📥 Що з'їв / тренування:", placeholder="Наприклад: з'їв 30г хліба")
@@ -175,7 +179,7 @@ selected_date = st.selectbox("📅 Вибрати день для перегля
 if st.button("⚙️ Налаштування", use_container_width=True): 
     st.session_state["edit_mode"] = not st.session_state["edit_mode"]
 
-btn_del = st.button("🗑️ Видалити", use_container_width=True)
+btn_del = st.button("🗑️ Видалити останній запис", use_container_width=True)
 has_trash = os.path.exists(TRASH_FILE)
 btn_back = st.button("🔄 Повернути", disabled=not has_trash, use_container_width=True)
 
@@ -196,12 +200,12 @@ if btn_back and has_trash:
 
 if st.session_state["edit_mode"]:
     with st.container(border=True):
-        st.subheader("Редагування цілей та ваги")
+        st.subheader(f"Налаштування профілю: {user_profile}")
         e_cal = st.number_input("Ціль калорій", value=int(user_settings["calories"]), step=10)
         e_prot = st.number_input("Ціль білків (г)", value=int(user_settings["protein"]), step=5)
         e_fat = st.number_input("Ціль жирів (г)", value=int(user_settings["fat"]), step=5)
         e_carb = st.number_input("Ціль вуглеводів (г)", value=int(user_settings["carbs"]), step=5)
-        e_weight = st.number_input("Актуальна вага (кг)", value=float(w_data.get("current_weight", 89.0)), step=0.1)
+        e_weight = st.number_input("Актуальна вага (кг)", value=float(w_data.get("current_weight", 70.0)), step=0.1)
         
         if st.button("💾 Зберегти зміни", type="primary", use_container_width=True):
             save_settings({"calories": e_cal, "protein": e_prot, "fat": e_fat, "carbs": e_carb, "bmr_daily": user_settings.get("bmr_daily", 1850)})
@@ -225,9 +229,12 @@ if not day_df.empty:
         total_burned = explicit_burned + bmr_total
 
     target_cal = user_settings["calories"]
+    target_p = user_settings["protein"]
+    target_f = user_settings["fat"]
+    target_c = user_settings["carbs"]
     deficit = total_burned - consumed
 
-    st.markdown(f"**📅 {selected_date} | Вага: ~{w_data.get('current_weight', 89.0):.1f} кг**")
+    st.markdown(f"**📅 {selected_date} | Вага: ~{w_data.get('current_weight', 70.0):.1f} кг**")
     
     total_macros = protein + fat + carbs
     if total_macros > 0:
@@ -247,9 +254,9 @@ if not day_df.empty:
                 </div>
             </div>
             <div class="macros-row">
-                <span style="color: #36A2EB;">🥩 Білки: {protein:.0f}г</span>
-                <span style="color: #FFCE56;">🥑 Жири: {fat:.0f}г</span>
-                <span style="color: #FF6384;">🍞 Вугл: {carbs:.0f}г</span>
+                <span style="color: #36A2EB;">🥩 Білки: {protein:.0f} / {target_p}г</span>
+                <span style="color: #FFCE56;">🥑 Жири: {fat:.0f} / {target_f}г</span>
+                <span style="color: #FF6384;">🍞 Вугл: {carbs:.0f} / {target_c}г</span>
             </div>
         </div>
     """, unsafe_allow_html=True)
@@ -268,6 +275,23 @@ if not day_df.empty:
 
     st.markdown(f'<div class="food-box"><b>📝 Лог:</b><br>{"".join(log_html_lines)}</div>', unsafe_allow_html=True)
     
+    if st.button("✏️ Редагувати лог (таблиця)", use_container_width=True):
+        st.session_state["edit_log_mode"] = not st.session_state["edit_log_mode"]
+
+    if st.session_state["edit_log_mode"]:
+        with st.container(border=True):
+            st.subheader("Редагування записів за день")
+            
+            # Отримуємо індекси та дані цього дня
+            day_indices = day_df.index
+            edited_day_df = st.data_editor(df_data.loc[day_indices], key=f"editor_{selected_date}", use_container_width=True)
+            
+            if st.button("💾 Зберегти зміни в лозі", type="primary", use_container_width=True):
+                df_data.loc[day_indices] = edited_day_df
+                df_data.to_excel(EXCEL_FILE, index=False)
+                st.session_state["edit_log_mode"] = False
+                st.rerun()
+
     if st.button("💡 Порада Gemini", use_container_width=True):
         st.session_state["show_advice"] = True
 
