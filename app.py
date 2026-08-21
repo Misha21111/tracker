@@ -1,4 +1,4 @@
-Import json
+import json
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -310,7 +310,13 @@ if not api_key:
   api_key = os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
-  st.error("⚠️ Не знайдено GEMINI_API_KEY у налаштуваннях.")
+  api_key = st.sidebar.text_input("🔑 Введіть GEMINI_API_KEY", type="password")
+
+if not api_key:
+  st.error(
+      "⚠️ Введіть GEMINI_API_KEY у боковому меню (Sidebar) або додайте в"
+      " secrets.toml."
+  )
   st.stop()
 
 client = genai.Client(api_key=api_key)
