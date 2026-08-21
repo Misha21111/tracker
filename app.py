@@ -375,7 +375,7 @@ if st.button("✅ ОК — додати", type="primary", use_container_width=Tr
                 "Усі числа повинні бути числовими."
             )
             response = client.models.generate_content(
-                model="gemini-3.7-flash",
+                model="gemini-3.6-flash-Lite",
                 contents=prompt + "\n\nЗапис користувача:\n" + user_input.strip(),
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
