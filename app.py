@@ -1,4 +1,4 @@
-import json
+Import json
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -314,7 +314,7 @@ if not api_key:
   st.stop()
 
 client = genai.Client(api_key=api_key)
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = "gemini-3.6-flash"
 
 COLUMNS = [
     "Дата",
@@ -469,33 +469,38 @@ def calculate_day(df, date_str, settings, watch_burned=0):
   return consumed, burned, balance, protein, fat, carbs, exercise, watch
 
 
-def calculate_weight(df, settings, watch_by_date):
+def calculate_weight(df, settings, watch_dict):
   start_w = float(settings.get("start_weight", 91.8))
-  bmr_daily = float(settings.get("bmr_daily", 1850))
+  if df.empty and not watch_dict:
+    return start_w
 
-  all_dates = set(df["Дата"].astype(str).unique()) | set(
-      watch_by_date.keys()
-  )
+  dates_df = set(df["Дата"].astype(str).unique()) if not df.empty else set()
+  dates_watch = set(watch_dict.keys())
+  all_dates = dates_df.union(dates_watch)
+
   if not all_dates:
     return start_w
 
-  total_consumed = float(
-      df[df["Тип"].astype(str) == "Їжа"]["Спожито"].sum()
+  total_consumed = (
+      float(df[df["Тип"] == "Їжа"]["Спожито"].sum()) if not df.empty else 0.0
   )
-  total_exercise = float(
-      df[
-          (df["Тип"].astype(str) == "Тренування")
-          & (~df["Опис"].str.contains("годинник", case=False, na=False))
-      ]["Спалено"].sum()
+  total_exercise = (
+      float(
+          df[
+              (df["Тип"] == "Тренування")
+              & (~df["Опис"].str.contains("годинник", case=False, na=False))
+          ]["Спалено"].sum()
+      )
+      if not df.empty
+      else 0.0
   )
-  total_watch = sum(float(v) for v in watch_by_date.values())
-  total_bmr = len(all_dates) * bmr_daily
+  total_watch = sum(float(v) for v in watch_dict.values())
+  total_bmr = len(all_dates) * float(settings.get("bmr_daily", 1850))
 
   total_burned = total_bmr + total_exercise + total_watch
-  net_deficit = total_burned - total_consumed
+  net_balance = total_burned - total_consumed
 
-  weight_loss = net_deficit / 7700.0
-  return start_w - weight_loss
+  return start_w - (net_balance / 7700.0)
 
 
 # ============================================================
@@ -658,7 +663,7 @@ if not df.empty:
 
 selected_date = st.selectbox("📅 День", dates)
 
-# Створення ключа та функції ДО віджета number_input (усуває NameError)
+st.markdown("### ⌚ Калорії з годинника")
 watch_key = f"watch_{profile_prefix}_{selected_date}"
 
 if watch_key not in st.session_state:
@@ -672,7 +677,7 @@ def on_watch_change():
 
 
 st.number_input(
-    "⌚ Спалені калорії з годинника (ккал)",
+    "Замінити спалені калорії з годинника (ккал)",
     min_value=0.0,
     step=10.0,
     key=watch_key,
@@ -688,8 +693,8 @@ watch_now = float(st.session_state[watch_key])
 consumed, burned, balance, protein, fat, carbs, exercise, watch = calculate_day(
     df, selected_date, settings, watch_now
 )
-current_weight = calculate_weight(df, settings, watch_by_date)
 target = float(settings["calories"])
+current_weight = calculate_weight(df, settings, watch_by_date)
 
 total_macros = protein + fat + carbs
 if total_macros > 0:
@@ -705,33 +710,40 @@ else:
 
 if balance >= 0:
   balance_label = f"📉 Дефіцит: {abs(balance):.0f} ккал"
+  balance_class = "deficit"
 else:
   balance_label = f"📈 Профіцит: {abs(balance):.0f} ккал"
+  balance_class = "surplus"
 
-donut_html = f"""
-<div class="section">
-    <div class="donut-wrap">
-        <div class="donut" style="background:{gradient};">
-            <div class="donut-hole">
-                <div class="balance">{balance_label}</div>
-                <div class="kcal-main">{consumed:.0f}</div>
-                <div class="kcal-sub">з {target:.0f} ккал</div>
-                <div class="weight-display">⚖️ {current_weight:.1f} кг</div>
-            </div>
-        </div>
-        <div class="macros">
-            <div class="macro p">🥩 Білки {protein:.0f}/{settings["protein"]} г</div>
-            <div class="macro f">🥑 Жири {fat:.0f}/{settings["fat"]} г</div>
-            <div class="macro c">🍞 Вуглеводи {carbs:.0f}/{settings["carbs"]} г</div>
-        </div>
-    </div>
-</div>
-"""
+donut_html = (
+    f'<div class="section"><div class="donut-wrap"><div class="donut"'
+    f' style="background:{gradient};"><div class="donut-hole"><div'
+    f' class="balance">{balance_label}</div><div'
+    f' class="kcal-main">{consumed:.0f}</div><div class="kcal-sub">з'
+    f' {target:.0f} ккал</div><div class="weight-display">⚖️'
+    f" {current_weight:.1f} кг</div></div></div><div class=\"macros\"><div"
+    f' class="macro p">🥩 Білки {protein:.0f}/{settings["protein"]}'
+    f' г</div><div class="macro f">🥑 Жири {fat:.0f}/{settings["fat"]}'
+    f' г</div><div class="macro c">🍞 Вуглеводи'
+    f' {carbs:.0f}/{settings["carbs"]} г</div></div></div></div>'
+)
 st.markdown(donut_html, unsafe_allow_html=True)
+
+bmr_val = today_bmr(settings, selected_date)
+st.markdown(
+    f'<div class="status {balance_class}">'
+    f"Загальний баланс за день: {abs(balance):.0f} ккал"
+    f' ({("Дефіцит" if balance >= 0 else "Профіцит")})<br>'
+    '<small style="font-size: 12px; opacity: 0.85;">🔥 Спалено всього:'
+    f" {burned:.0f} ккал (BMR: {bmr_val:.0f} + Годинник: {watch:.0f} +"
+    f" Тренування: {exercise:.0f})</small>"
+    "</div>",
+    unsafe_allow_html=True,
+)
 
 
 # ============================================================
-# AI ПІДКАЗКА: ЩО ДОЇСТИ ДО НОРМИ
+# AI ПІДКАЗКА: ЩО ДОЇСТИ ДО НОРМИ (З УРАХУВАННЯМ ЧАСУ ДОБИ)
 # ============================================================
 
 rem_kcal = max(0.0, target - consumed)
@@ -815,10 +827,10 @@ if st.session_state["edit_mode"]:
 
 
 # ============================================================
-# ЛОГ ЗА ДЕНЬ
+# ВЛОГ ЗА ДЕНЬ
 # ============================================================
 
-st.markdown(f"### 📝 Лог за {selected_date}")
+st.markdown(f"### 📝 Влог за {selected_date}")
 
 if watch_now > 0:
   st.markdown(
@@ -837,7 +849,7 @@ if not day_df.empty:
   ]
 
 if day_df.empty and watch_now <= 0:
-  st.info("За цей день немає записів.")
+  st.info("За цей день інформативних записів немає.")
 else:
   for idx, row in day_df.iloc[::-1].iterrows():
     entry_type = str(row["Тип"])
