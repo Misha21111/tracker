@@ -372,7 +372,7 @@ if st.button("✅ ОК — додати", type="primary", use_container_width=Tr
   "fat": 0,
   "carbs": 0
 }
-Усі числа повинні бути числовими. Не додавай markdown.
+Усі числа повинні бути числовими.
 """
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
@@ -381,5 +381,43 @@ if st.button("✅ ОК — додати", type="primary", use_container_width=Tr
             )
 
             raw = (response.text or "").strip()
-            if raw.startswith("```"):
-                raw = raw.replace("
+            raw = raw.replace("```json", "").replace("```", "").strip()
+
+            result = json.loads(raw)
+
+            description = clean_text(result.get("description", user_input.strip()))
+            entry_type = clean_text(result.get("type", "Їжа"))
+            if entry_type not in ["Їжа", "Тренування"]:
+                entry_type = "Їжа"
+
+            consumed_kcal = clean_number(result.get("consumed_kcal", 0))
+            burned_kcal = clean_number(result.get("burned_kcal", 0))
+            protein = clean_number(result.get("protein", 0))
+            fat = clean_number(result.get("fat", 0))
+            carbs = clean_number(result.get("carbs", 0))
+
+            if entry_type == "Тренування":
+                consumed_kcal = 0.0
+            else:
+                burned_kcal = 0.0
+
+            now = datetime.now(LOCAL_TZ)
+            new_row = [
+                selected_date,
+                now.strftime("%H:%M"),
+                description,
+                entry_type,
+                consumed_kcal,
+                burned_kcal,
+                protein,
+                fat,
+                carbs
+            ]
+
+            sheet.append_row(new_row)
+            st.success("✅ Запис додано в Google Таблицю.")
+            st.rerun()
+
+        except Exception as error:
+            st.error(f"❌ Помилка: {error}")
+
