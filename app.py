@@ -34,7 +34,7 @@ if not api_key:
     st.stop()
 
 client = genai.Client(api_key=api_key)
-GEMINI_MODEL = "gemini-2.5-flash"  # Робоча стабільна модель
+GEMINI_MODEL = "gemini-3.6-flash"  # Робоча стабільна модель
 
 # Google Sheets
 COLUMNS = [
