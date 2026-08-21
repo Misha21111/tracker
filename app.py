@@ -1,420 +1,127 @@
-import json
-import os
-import re
-from datetime import datetime, timedelta, timezone
-
-import pandas as pd
 import streamlit as st
-from google import genai
-from google.genai import types
+import gspread
+import pandas as pd
+from datetime import datetime, date
 
-# ============================================================
-# ЧАСОВИЙ ПОЯС ТА НАЛАШТУВАННЯ
-# ============================================================
+st.set_page_config(page_title="Мій Фітнес Трекер", page_icon="🏋️‍♂️", layout="wide")
+
+# Ініціалізація історії дій для скасування (максимум 20)
+if "undo_stack" not in st.session_state:
+    st.session_state.undo_stack = []
+
+# Підключення до Google Sheets
+@st.cache_resource
+def get_google_sheet():
+    credentials = dict(st.secrets["gcp_service_account"])
+    gc = gspread.service_account_from_dict(credentials)
+    sh = gc.open_by_url(st.secrets["GSHEET_URL"])
+    return sh.sheet1
 
 try:
-    from zoneinfo import ZoneInfo
-    LOCAL_TZ = ZoneInfo("Europe/Warsaw")
-except Exception:
-    LOCAL_TZ = timezone(timedelta(hours=2))
-
-st.set_page_config(page_title="Мій Фітнес", page_icon="⚖️", layout="centered")
-
-COLUMNS = [
-    "Дата", "Час", "Опис", "Тип", "Спожито", "Спалено", 
-    "Білки", "Жири", "Вуглеводи", "Продукти"
-]
-
-# ============================================================
-# АВТОРИЗАЦІЯ GEMINI
-# ============================================================
-
-api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
-if not api_key:
-    st.error("⚠️ Відсутній GEMINI_API_KEY у Secrets чи змінних середовища.")
+    sheet = get_google_sheet()
+except Exception as e:
+    st.error(f"Помилка підключення до Google Таблиці: {e}")
     st.stop()
 
-client = genai.Client(api_key=api_key)
-GEMINI_MODEL = "gemini-2.5-flash"
+st.title("🏋️‍♂️ Фітнес Трекер & Лог Калорій")
 
-# ============================================================
-# ПІДКТЮЧЕННЯ GOOGLE SHEETS (З ПЕРЕВІРКОЮ)
-# ============================================================
-
-def get_worksheet(profile_prefix: str):
-    try:
-        import gspread
-        from google.oauth2.service_account import Credentials
-        
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive"
-        ]
-        
-        if "gcp_service_account" not in st.secrets or "GSHEET_URL" not in st.secrets:
-            return None
-            
-        creds_dict = dict(st.secrets["gcp_service_account"])
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
-        gc = gspread.authorize(creds)
-        
-        sh = gc.open_by_url(st.secrets["GSHEET_URL"])
-        sheet_name = f"Entries_{profile_prefix}"
-        
-        try:
-            ws = sh.worksheet(sheet_name)
-        except gspread.exceptions.WorksheetNotFound:
-            ws = sh.add_worksheet(title=sheet_name, rows="1000", cols="20")
-            ws.append_row(COLUMNS)
-        return ws
-    except Exception as e:
-        st.warning(f"⚠️ Google Sheets недоступний: {e}. Використовується локальне збереження.")
-        return None
-
-# ============================================================
-# ПРОФІЛЬ ТА ФАЙЛИ
-# ============================================================
-
-user_profile = st.sidebar.selectbox("👤 Профіль", ["Я", "Дружина"], key="user_profile_select")
-profile_prefix = "user1" if user_profile == "Я" else "user2"
-
-LOCAL_EXCEL_FILE = f"fitness_entries_{profile_prefix}.xlsx"
-SETTINGS_FILE = f"user_settings_{profile_prefix}.json"
-WATCH_FILE = f"watch_burned_{profile_prefix}.json"
-IMAGE_URL = "https://i.postimg.cc/kMS67m1J/Screenshot-20260819-175524-Facebook.jpg"
-
-# ============================================================
-# CSS СТИЛІ
-# ============================================================
-
-st.markdown(
-    f"""
-    <style>
-    .stApp {{
-        background: linear-gradient(rgba(0,0,0,.72), rgba(0,0,0,.88)), url("{IMAGE_URL}") center / cover fixed;
-    }}
-    #MainMenu, footer {{ visibility: hidden; }}
-    .block-container {{ max-width: 760px; padding-top: 1rem; padding-bottom: 4rem; }}
-    div.stButton > button {{
-        border-radius: 16px !important;
-        min-height: 48px !important;
-        border: 1px solid rgba(255,255,255,.18) !important;
-        background: rgba(30,32,40,.94) !important;
-        color: white !important;
-        font-weight: 700 !important;
-    }}
-    .section {{
-        background: rgba(10,12,17,.68);
-        border: 1px solid rgba(255,255,255,.14);
-        border-radius: 22px;
-        padding: 18px;
-        margin: 12px 0;
-    }}
-    .donut-wrap {{ display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 12px 0 18px; }}
-    .donut {{ width: 230px; height: 230px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }}
-    .donut-hole {{ width: 164px; height: 164px; border-radius: 50%; background: #11131a; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: white; }}
-    .balance {{ font-size: 12px; font-weight: 800; }}
-    .kcal-main {{ font-size: 24px; font-weight: 900; }}
-    .macros {{ display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }}
-    .macro {{ border-radius: 14px; padding: 8px 11px; background: rgba(20,22,29,.92); font-size: 12px; font-weight: 700; }}
-    .macro.p {{ color: #36A2EB; }} .macro.f {{ color: #FFCE56; }} .macro.c {{ color: #FF6384; }}
-    .log-card {{ background: rgba(13,15,21,.80); border: 1px solid rgba(255,255,255,.13); border-radius: 18px; padding: 14px; margin: 12px 0; }}
-    .log-head {{ display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }}
-    .status {{ text-align: center; font-weight: 900; font-size: 17px; padding: 12px; border-radius: 16px; margin: 12px 0; }}
-    .deficit {{ color: #5ee89a; background: rgba(20,120,65,.30); }}
-    .surplus {{ color: #ff7373; background: rgba(140,30,35,.30); }}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-# ============================================================
-# ФУНКЦІЇ ДАНИХ
-# ============================================================
-
-def clean_json_response(text: str):
-    if not text:
-        return None
-    cleaned = re.sub(r"^```(?:json)?\s*", "", text.strip(), flags=re.MULTILINE)
-    cleaned = re.sub(r"\s*```$", "", cleaned, flags=re.MULTILINE)
-    try:
-        return json.loads(cleaned)
-    except Exception:
-        return None
-
-def load_settings():
-    default = {"calories": 2000, "protein": 160, "fat": 70, "carbs": 180, "bmr_daily": 1850, "start_weight": 91.8}
-    if os.path.exists(SETTINGS_FILE):
-        try:
-            with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-                return {**default, **json.load(f)}
-        except Exception:
-            pass
-    return default
-
-def load_data(ws):
-    empty = pd.DataFrame(columns=COLUMNS)
+# 1. Форма додавання запису
+st.subheader("➕ Додати новий запис")
+with st.form("add_entry_form", clear_on_submit=True):
+    col1, col2, col3 = st.columns(3)
     
-    # Спроба зчитати з Google Sheets
-    if ws is not None:
-        try:
-            rows = ws.get_all_values()
-            if len(rows) > 1:
-                df = pd.DataFrame(rows[1:], columns=rows[0])
-                for col in COLUMNS:
-                    if col not in df.columns:
-                        df[col] = "" if col in ["Опис", "Тип", "Продукти"] else 0
-                df = df[COLUMNS]
-                for col in ["Спожито", "Спалено", "Білки", "Жири", "Вуглеводи"]:
-                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
-                df["Дата"] = df["Дата"].astype(str).str[:10]
-                return df
-        except Exception as e:
-            st.error(f"Помилка читання Google Sheets: {e}")
-
-    # Фолбек на локальний Excel
-    if os.path.exists(LOCAL_EXCEL_FILE):
-        try:
-            df = pd.read_excel(LOCAL_EXCEL_FILE)
-            for col in COLUMNS:
-                if col not in df.columns:
-                    df[col] = "" if col in ["Опис", "Тип", "Продукти"] else 0
-            df = df[COLUMNS]
-            for col in ["Спожито", "Спалено", "Білки", "Жири", "Вуглеводи"]:
-                df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
-            df["Дата"] = df["Дата"].astype(str).str[:10]
-            return df
-        except Exception:
-            pass
-
-    return empty
-
-def save_row(ws, new_row, df):
-    # 1. Запис у Google Sheets
-    saved_to_gsheets = False
-    if ws is not None:
-        try:
-            row_values = [str(new_row.get(col, "")) for col in COLUMNS]
-            ws.append_row(row_values)
-            saved_to_gsheets = True
-        except Exception as e:
-            st.error(f"Не вдалося зберегти в Google Sheets: {e}")
-
-    # 2. Локальний збереження в Excel (завжди як резерв)
-    new_df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-    new_df.to_excel(LOCAL_EXCEL_FILE, index=False)
+    with col1:
+        entry_date = st.date_input("Дата", value=date.today())
+        entry_time = st.time_input("Час", value=datetime.now().time()).strftime("%H:%M")
+        entry_type = st.selectbox("Тип запису", ["Харчування", "Тренування", "Вага"])
+        
+    with col2:
+        description = st.text_input("Опис / Назва вправи чи прийому їжі")
+        consumed = st.number_input("Спожито (ккал)", min_value=0, value=0)
+        burned = st.number_input("Спалено (ккал)", min_value=0, value=0)
+        
+    with col3:
+        protein = st.number_input("Білки (г)", min_value=0.0, value=0.0, step=0.1)
+        fat = st.number_input("Жири (г)", min_value=0.0, value=0.0, step=0.1)
+        carbs = st.number_input("Вуглеводи (г)", min_value=0.0, value=0.0, step=0.1)
+        
+    products = st.text_area("Деталі / Продукти (необов'язково)")
     
-    return saved_to_gsheets
+    submit_button = st.form_submit_button("Зберегти запис")
 
-def load_watch():
-    if not os.path.exists(WATCH_FILE):
-        return {}
-    try:
-        with open(WATCH_FILE, "r", encoding="utf-8") as f:
-            return {str(k)[:10]: float(v) for k, v in json.load(f).items()}
-    except Exception:
-        return {}
+if submit_button:
+    new_row = [
+        str(entry_date),
+        str(entry_time),
+        description,
+        entry_type,
+        consumed,
+        burned,
+        protein,
+        fat,
+        carbs,
+        products
+    ]
+    sheet.append_row(new_row)
+    
+    # Додаємо мітку дії у стек скасувань (підтримуємо не більше 20 кроків)
+    st.session_state.undo_stack.append(True)
+    if len(st.session_state.undo_stack) > 20:
+        st.session_state.undo_stack.pop(0)
+        
+    st.success("Запис успішно додано!")
+    st.rerun()
 
-def save_watch(d):
-    with open(WATCH_FILE, "w", encoding="utf-8") as f:
-        json.dump(d, f, ensure_ascii=False, indent=2)
+st.divider()
 
-def today_bmr(settings, date_str):
-    daily = float(settings.get("bmr_daily", 1850))
-    today_str = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
-    if str(date_str)[:10] == today_str:
-        now = datetime.now(LOCAL_TZ)
-        hours = now.hour + now.minute / 60
-        return daily * min(hours / 24, 1.0)
-    return daily
+# 2. Управління записувати та видалення
+st.subheader("⚙️ Управління даними")
 
-def calculate_day(df, date_str, settings, watch_burned=0):
-    target_date = str(date_str)[:10]
-    day = df[df["Дата"].astype(str).str[:10] == target_date].copy()
-    food = day[day["Тип"].astype(str) == "Їжа"]
+col_undo, col_delete = st.columns(2)
 
-    consumed = float(food["Спожито"].sum())
-    protein = float(food["Білки"].sum())
-    fat = float(food["Жири"].sum())
-    carbs = float(food["Вуглеводи"].sum())
+with col_undo:
+    st.write(f"**Скасування дій у цій сесії** (доступно: **{len(st.session_state.undo_stack)}/20**)")
+    if st.button("⏪ Скасувати останній запис"):
+        if len(st.session_state.undo_stack) > 0:
+            records = sheet.get_all_records()
+            if records:
+                # Видаляємо останній рядок у таблиці (індекс +1 враховує заголовок)
+                sheet.delete_rows(len(records) + 1)
+                st.session_state.undo_stack.pop()
+                st.success("Останній запис скасовано!")
+                st.rerun()
+            else:
+                st.warning("Таблиця порожня.")
+        else:
+            st.warning("Немає дій для скасування (ліміт 20 дій вичерпано або записів ще не додано).")
 
-    exercise_df = day[(day["Тип"].astype(str) == "Тренування") & (~day["Опис"].str.contains("годинник", case=False, na=False))]
-    exercise = float(exercise_df["Спалено"].sum())
-    watch = float(watch_burned or 0)
+with col_delete:
+    st.write("**Видалення цілого дня**")
+    selected_date = st.date_input("Оберіть дату для видалення", value=date.today(), key="del_date_key")
+    if st.button("🗑️ Видалити всі записи за день"):
+        records = sheet.get_all_records()
+        # Пошук усіх рядків з вибраною датою (+2 через наявність заголовка таблиці)
+        rows_to_delete = [i + 2 for i, row in enumerate(records) if str(row.get("Дата")) == str(selected_date)]
+        
+        if rows_to_delete:
+            # Видаляємо з кінця до початку, щоб не збивати індекси рядків
+            for row_idx in reversed(rows_to_delete):
+                sheet.delete_rows(row_idx)
+            st.success(f"Усі записи за {selected_date} повністю видалено!")
+            st.rerun()
+        else:
+            st.info("За вибрану дату записів не знайдено.")
 
-    burned = today_bmr(settings, target_date) + exercise + watch
-    balance = burned - consumed
-    return consumed, burned, balance, protein, fat, carbs, exercise, watch
+st.divider()
 
-# ============================================================
-# ІНІЦІАЛІЗАЦІЯ ДАНИХ
-# ============================================================
-
-ws = get_worksheet(profile_prefix)
-settings = load_settings()
-df = load_data(ws)
-watch_by_date = load_watch()
-
-st.title("⚖️ Мій Фітнес")
-st.caption(f"Профіль: {user_profile} | Джерело: {'Google Таблиця' if ws else 'Локальний файл'}")
-
-# ============================================================
-# ФОРМА ДОДАВАННЯ
-# ============================================================
-
-st.markdown("### 🍽️ Додати запис")
-
-def handle_add_click():
-    st.session_state["pending_input"] = st.session_state.get("food_input", "")
-    st.session_state["food_input"] = ""
-
-st.text_input("Що з'їв / яке тренування?", placeholder="Наприклад: плов з куркою 350 г, 2 яйця", key="food_input")
-st.button("✅ Додати в лог", use_container_width=True, on_click=handle_add_click)
-
-# ============================================================
-# ОБРОБКА З GEMINI
-# ============================================================
-
-if "pending_input" in st.session_state:
-    text = (st.session_state.pop("pending_input", "") or "").strip()
-    if text:
-        with st.spinner("Аналізую запис через AI..."):
-            prompt = f"""
-            Ти харчовий трекер. Проаналізуй цей запис: "{text}"
-            Поверни ТІЛЬКИ валідний JSON.
-            Формат:
-            {{
-              "type": "Їжа" або "Тренування",
-              "description": "короткий опис",
-              "total_kcal": число,
-              "burned_kcal": число,
-              "protein": число,
-              "fat": число,
-              "carbs": число,
-              "products": [
-                {{"name": "назва продукту", "kcal": число, "protein": число, "fat": число, "carbs": число}}
-              ]
-            }}
-            """
-            try:
-                response = client.models.generate_content(
-                    model=GEMINI_MODEL,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(response_mime_type="application/json")
-                )
-                data = clean_json_response(response.text)
-                
-                if data:
-                    entry_type = "Тренування" if str(data.get("type", "")).lower().startswith("трен") else "Їжа"
-                    now = datetime.now(LOCAL_TZ)
-
-                    new_row = {
-                        "Дата": now.strftime("%Y-%m-%d"),
-                        "Час": now.strftime("%H:%M"),
-                        "Опис": str(data.get("description") or text),
-                        "Тип": entry_type,
-                        "Спожито": float(data.get("total_kcal", 0)) if entry_type == "Їжа" else 0.0,
-                        "Спалено": float(data.get("burned_kcal", 0)) if entry_type == "Тренування" else 0.0,
-                        "Білки": float(data.get("protein", 0)),
-                        "Жири": float(data.get("fat", 0)),
-                        "Вуглеводи": float(data.get("carbs", 0)),
-                        "Продукти": json.dumps(data.get("products", []), ensure_ascii=False)
-                    }
-
-                    save_row(ws, new_row, df)
-                    st.success("✅ Запис успішно додано!")
-                    st.rerun()
-                else:
-                    st.error("❌ Gemini повернув некоректний результат. Спробуйте уточнити запис.")
-            except Exception as e:
-                st.error(f"Помилка аналізу Gemini: {e}")
-
-# ============================================================
-# КАЛЕНДАР (ВИБІР ДАТИ)
-# ============================================================
-
-st.markdown("---")
-selected_date_dt = st.date_input("📅 Оберіть дату:", value=datetime.now(LOCAL_TZ).date(), format="YYYY-MM-DD")
-selected_date = selected_date_dt.strftime("%Y-%m-%d")
-
-# ============================================================
-# ГОДИННИК ТА РОЗРАХУНОК ДНЯ
-# ============================================================
-
-watch_key = f"watch_{profile_prefix}_{selected_date}"
-if watch_key not in st.session_state:
-    st.session_state[watch_key] = float(watch_by_date.get(selected_date, 0))
-
-def on_watch_change():
-    watch_by_date[selected_date] = float(st.session_state[watch_key])
-    save_watch(watch_by_date)
-
-st.number_input("⌚ Спалені калорії з годинника (ккал)", min_value=0.0, step=10.0, key=watch_key, on_change=on_watch_change)
-
-watch_now = float(st.session_state[watch_key])
-consumed, burned, balance, protein, fat, carbs, exercise, watch = calculate_day(df, selected_date, settings, watch_now)
-target = float(settings["calories"])
-
-total_macros = protein + fat + carbs
-if total_macros > 0:
-    p_deg = protein / total_macros * 360
-    f_deg = p_deg + (fat / total_macros * 360)
-    c_deg = f_deg + (carbs / total_macros * 360)
-    gradient = f"conic-gradient(#36A2EB 0deg {p_deg}deg, #FFCE56 {p_deg}deg {f_deg}deg, #FF6384 {f_deg}deg {c_deg}deg)"
-else:
-    gradient = "conic-gradient(rgba(255,255,255,.14) 0deg 360deg)"
-
-balance_label = f"📉 Дефіцит: {abs(balance):.0f} ккал" if balance >= 0 else f"📈 Профіцит: {abs(balance):.0f} ккал"
-
-st.markdown(
-    f"""
-<div class="section">
-    <div class="donut-wrap">
-        <div class="donut" style="background:{gradient};">
-            <div class="donut-hole">
-                <div class="balance">{balance_label}</div>
-                <div class="kcal-main">{consumed:.0f}</div>
-                <div class="kcal-sub">з {target:.0f} ккал</div>
-            </div>
-        </div>
-        <div class="macros">
-            <div class="macro p">🥩 Білки {protein:.0f}/{settings["protein"]} г</div>
-            <div class="macro f">🥑 Жири {fat:.0f}/{settings["fat"]} г</div>
-            <div class="macro c">🍞 Вуглеводи {carbs:.0f}/{settings["carbs"]} г</div>
-        </div>
-    </div>
-</div>
-""",
-    unsafe_allow_html=True,
-)
-
-# ============================================================
-# ВЛОГ ЗА ОБРАНИЙ ДЕНЬ
-# ============================================================
-
-st.markdown(f"### 📝 Лог за {selected_date}")
-
-day_df = df[df["Дата"].astype(str).str[:10] == selected_date].copy()
-
-if day_df.empty:
-    st.info("За цей день немає записів.")
-else:
-    for _, row in day_df.iloc[::-1].iterrows():
-        entry_type = str(row["Тип"])
-        icon = "🍽️" if entry_type == "Їжа" else "💪"
-        kcal = float(row["Спожито"] if entry_type == "Їжа" else row["Спалено"])
-
-        st.markdown(
-            f"""
-        <div class="log-card">
-            <div class="log-head">
-                <div class="log-title">{str(row["Час"])[:5]} {icon} {row["Опис"]}</div>
-                <div class="log-kcal">{kcal:+.0f} ккал</div>
-            </div>
-            <div style="font-size: 12px; margin-top: 5px; opacity: 0.8;">
-                🥩 {row["Білки"]}г | 🥑 {row["Жири"]}г | 🍞 {row["Вуглеводи"]}г
-            </div>
-        </div>
-        """,
-            unsafe_allow_html=True,
-        )
+# 3. Перегляд збережених даних
+st.subheader("📊 Лог збережених записів")
+try:
+    records = sheet.get_all_records()
+    if records:
+        df = pd.DataFrame(records)
+        st.dataframe(df, use_container_width=True)
+    else:
+        st.info("Таблиця поки що порожня.")
+except Exception as e:
+    st.error(f"Помилка зчитування даних з Google Таблиці: {e}")
