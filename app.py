@@ -39,7 +39,7 @@ client = genai.Client(api_key=api_key)
 
 
 # ============================================================
-# 4. GOOGLE SHEETS ПІДКТЮЧЕННЯ
+# 4. GOOGLE SHEETS ПІДКЛЮЧЕННЯ
 # ============================================================
 @st.cache_resource
 def init_gsheet():
@@ -56,7 +56,7 @@ def init_gsheet():
 try:
   gs_client = init_gsheet()
   # Відкриваємо Google Таблицю з назвою "Мій Фітнес"
-  spreadsheet = gs_client.open("Мій Фітнес")
+  spreadsheet = gs_client.open_by_key("1Blo5R_ZDOeAgVkRwXDfY1Wpw12QVrZMVUEfmY_Jlk_U")
 
   # Вибираємо або створюємо вкладку для відповідного профілю
   try:
