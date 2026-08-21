@@ -382,4 +382,4 @@ if st.button("✅ ОК — додати", type="primary", use_container_width=Tr
 
             raw = (response.text or "").strip()
             if raw.startswith("```"):
-                raw = raw.replace("```json", "").replace("```", "").strip()
+                raw = raw.replace("
