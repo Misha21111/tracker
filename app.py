@@ -370,7 +370,13 @@ def load_data():
     df = df[COLUMNS]
     for col in ["Спожито", "Спалено", "Білки", "Жири", "Вуглеводи"]:
       df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
-    df["Дата"] = df["Дата"].astype(str)
+
+    # Примусове приведення дат до чистого YYYY-MM-DD
+    df["Дата"] = (
+        pd.to_datetime(df["Дата"], errors="coerce")
+        .dt.strftime("%Y-%m-%d")
+        .fillna(df["Дата"].astype(str).str[:10])
+    )
     df["Час"] = df["Час"].astype(str).str[:5]
     df["Опис"] = df["Опис"].fillna("").astype(str)
     df["Тип"] = df["Тип"].fillna("Їжа").astype(str)
@@ -381,7 +387,10 @@ def load_data():
 
 
 def save_data(df):
-  df.to_excel(EXCEL_FILE, index=False)
+  # Зберігаємо дату як строковий формат YYYY-MM-DD
+  df_to_save = df.copy()
+  df_to_save["Дата"] = df_to_save["Дата"].astype(str).str[:10]
+  df_to_save.to_excel(EXCEL_FILE, index=False)
 
 
 def load_watch():
@@ -389,7 +398,7 @@ def load_watch():
     return {}
   try:
     with open(WATCH_FILE, "r", encoding="utf-8") as f:
-      return {str(k): float(v) for k, v in json.load(f).items()}
+      return {str(k)[:10]: float(v) for k, v in json.load(f).items()}
   except Exception:
     return {}
 
@@ -440,7 +449,7 @@ def row_products(row):
 def today_bmr(settings, date_str):
   daily = float(settings.get("bmr_daily", 1850))
   today = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
-  if str(date_str) == today:
+  if str(date_str)[:10] == today:
     now = datetime.now(LOCAL_TZ)
     hours = now.hour + now.minute / 60
     return daily * min(hours / 24, 1.0)
@@ -448,7 +457,8 @@ def today_bmr(settings, date_str):
 
 
 def calculate_day(df, date_str, settings, watch_burned=0):
-  day = df[df["Дата"].astype(str) == str(date_str)].copy()
+  target_date = str(date_str)[:10]
+  day = df[df["Дата"].astype(str).str[:10] == target_date].copy()
   food = day[day["Тип"].astype(str) == "Їжа"]
 
   consumed = float(food["Спожито"].sum())
@@ -463,7 +473,7 @@ def calculate_day(df, date_str, settings, watch_burned=0):
   exercise = float(exercise_df["Спалено"].sum())
   watch = float(watch_burned or 0)
 
-  burned = today_bmr(settings, date_str) + exercise + watch
+  burned = today_bmr(settings, target_date) + exercise + watch
   balance = burned - consumed
 
   return consumed, burned, balance, protein, fat, carbs, exercise, watch
@@ -474,15 +484,21 @@ def calculate_weight(df, settings, watch_dict):
   if df.empty and not watch_dict:
     return start_w
 
-  dates_df = set(df["Дата"].astype(str).unique()) if not df.empty else set()
-  dates_watch = set(watch_dict.keys())
-  all_dates = dates_df.union(dates_watch)
+  dates_df = (
+      set(df["Дата"].astype(str).str[:10].unique())
+      if not df.empty
+      else set()
+  )
+  dates_watch = set(str(k)[:10] for k in watch_dict.keys())
+  all_dates = {d for d in dates_df.union(dates_watch) if d and d != "nan"}
 
   if not all_dates:
     return start_w
 
   total_consumed = (
-      float(df[df["Тип"] == "Їжа"]["Спожито"].sum()) if not df.empty else 0.0
+      float(df[df["Тип"] == "Їжа"]["Спожито"].sum())
+      if not df.empty
+      else 0.0
   )
   total_exercise = (
       float(
@@ -657,8 +673,9 @@ if "pending_input" in st.session_state:
 today = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
 dates = [today]
 if not df.empty:
-  for d in sorted(df["Дата"].astype(str).unique(), reverse=True):
-    if d not in dates:
+  unique_dates = df["Дата"].astype(str).str[:10].unique()
+  for d in sorted(unique_dates, reverse=True):
+    if d and d not in dates and d != "nan":
       dates.append(d)
 
 selected_date = st.selectbox("📅 День", dates)
@@ -840,7 +857,7 @@ if watch_now > 0:
       unsafe_allow_html=True,
   )
 
-day_df = df[df["Дата"].astype(str) == str(selected_date)].copy()
+day_df = df[df["Дата"].astype(str).str[:10] == str(selected_date)[:10]].copy()
 
 if not day_df.empty:
   day_df = day_df[(day_df["Спожито"] > 0) | (day_df["Спалено"] > 0)]
