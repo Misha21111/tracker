@@ -9,9 +9,6 @@ import streamlit.components.v1 as components
 import gspread
 from google.oauth2.service_account import Credentials
 
-from google import genai
-from google.genai import types
-
 
 # ============================================================
 # STREAMLIT
