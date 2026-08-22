@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 import gspread
 from google.oauth2.service_account import Credentials
 from google import genai
@@ -40,7 +41,7 @@ except Exception:
 
 profile = st.sidebar.selectbox(
     "👤 Профіль",
-    ["Я", "Дружина"]
+    ["Я", "Дружина"],
 )
 
 profile_id = "user1" if profile == "Я" else "user2"
@@ -80,20 +81,16 @@ def get_gspread_client():
             st.secrets["gcp_service_account"]
         )
 
-        credentials = (
-            Credentials.from_service_account_info(
-                info,
-                scopes=scopes,
-            )
+        credentials = Credentials.from_service_account_info(
+            info,
+            scopes=scopes,
         )
 
     elif os.path.exists("service_account.json"):
 
-        credentials = (
-            Credentials.from_service_account_file(
-                "service_account.json",
-                scopes=scopes,
-            )
+        credentials = Credentials.from_service_account_file(
+            "service_account.json",
+            scopes=scopes,
         )
 
     else:
@@ -106,59 +103,8 @@ def get_gspread_client():
     return gspread.authorize(credentials)
 
 
-def get_google_spreadsheet():
-
-    # Не кешуємо Spreadsheet/Worksheet.
-    # Після змін завжди отримуємо актуальний об'єкт.
-
-    client = get_gspread_client()
-
-    return client.open_by_key(
-        SPREADSHEET_ID
-    )
-
-
-def get_worksheet():
-
-    spreadsheet = get_google_spreadsheet()
-
-    try:
-
-        ws = spreadsheet.worksheet(
-            sheet_tab
-        )
-
-    except gspread.exceptions.WorksheetNotFound:
-
-        ws = spreadsheet.add_worksheet(
-            title=sheet_tab,
-            rows=1000,
-            cols=len(COLUMNS),
-        )
-
-    first_row = ws.get("A1:I1")
-
-    header = (
-        first_row[0]
-        if first_row
-        else []
-    )
-
-    # Гарантуємо правильні заголовки.
-    # Дані нижче не стираємо.
-
-    if header != COLUMNS:
-
-        ws.update(
-            "A1:I1",
-            [COLUMNS],
-            value_input_option="USER_ENTERED",
-        )
-
-    return ws
-
-
-def google_connection_info():
+@st.cache_resource(show_spinner=False)
+def get_worksheet(tab_name):
 
     client = get_gspread_client()
 
@@ -168,160 +114,38 @@ def google_connection_info():
 
     try:
 
-        email = client.auth.service_account_email
-
-    except Exception:
-
-        email = "service account"
-
-    return (
-        spreadsheet.title,
-        sheet_tab,
-        email,
-    )
-
-
-def sheet_row_values(row):
-
-    return [
-        clean_text(
-            row.get("Дата", "")
-        ),
-
-        clean_text(
-            row.get("Час", "")
-        ),
-
-        clean_text(
-            row.get("Опис", "")
-        ),
-
-        clean_text(
-            row.get("Тип", "Їжа")
-        ) or "Їжа",
-
-        clean_number(
-            row.get("Спожито", 0)
-        ),
-
-        clean_number(
-            row.get("Спалено", 0)
-        ),
-
-        clean_number(
-            row.get("Білки", 0)
-        ),
-
-        clean_number(
-            row.get("Жири", 0)
-        ),
-
-        clean_number(
-            row.get("Вуглеводи", 0)
-        ),
-    ]
-
-
-def append_entry(row):
-
-    ws = get_worksheet()
-
-    values = sheet_row_values(
-        row
-    )
-
-    # Додаємо новий рядок.
-    # Старі записи не перезаписуються.
-
-    ws.append_rows(
-        [values],
-        value_input_option="USER_ENTERED",
-        insert_data_option="INSERT_ROWS",
-    )
-
-    # Перевіряємо, що Google реально записав дані.
-
-    all_values = ws.get_all_values()
-
-    if len(all_values) < 2:
-
-        raise RuntimeError(
-            "Google Sheets не підтвердив "
-            "додавання рядка."
+        ws = spreadsheet.worksheet(
+            tab_name
         )
 
-    saved = all_values[-1]
+    except gspread.exceptions.WorksheetNotFound:
 
-    saved = (
-        saved
-        + [""] * len(COLUMNS)
-    )[:len(COLUMNS)]
-
-    if saved[:4] != values[:4]:
-
-        raise RuntimeError(
-            "Google Sheets відповів, "
-            "але останній рядок не збігається "
-            "з доданими даними.\n"
-            f"Отримано: {saved[:4]}"
+        ws = spreadsheet.add_worksheet(
+            title=tab_name,
+            rows=1000,
+            cols=len(COLUMNS),
         )
-
-
-def delete_last_entry():
-
-    ws = get_worksheet()
 
     values = ws.get_all_values()
 
-    if len(values) <= 1:
+    if not values:
 
-        return None
-
-    last = values[-1]
-
-    ws.delete_rows(
-        len(values)
-    )
-
-    return dict(
-        zip(
+        ws.append_row(
             COLUMNS,
-            (
-                last
-                + [""] * len(COLUMNS)
-            )[:len(COLUMNS)]
-        )
-    )
-
-
-def replace_all_data(df):
-
-    ws = get_worksheet()
-
-    clean = normalize_dataframe(
-        df
-    )
-
-    ws.clear()
-
-    ws.update(
-        "A1:I1",
-        [COLUMNS],
-        value_input_option="USER_ENTERED",
-    )
-
-    if not clean.empty:
-
-        values = [
-            sheet_row_values(row)
-            for _, row in clean.iterrows()
-        ]
-
-        ws.update(
-            f"A2:I{len(values) + 1}",
-            values,
             value_input_option="USER_ENTERED",
         )
+
+    elif values[0][:len(COLUMNS)] != COLUMNS:
+
+        if len(values[0]) < len(COLUMNS):
+
+            ws.update(
+                "A1:I1",
+                [COLUMNS],
+                value_input_option="USER_ENTERED",
+            )
+
+    return ws
 
 
 # ============================================================
@@ -336,379 +160,236 @@ BACKGROUND_IMAGE = (
 
 st.markdown(
     f"""
-<style>
+    <style>
 
-.stApp {{
-    background-image:
-        linear-gradient(
-            rgba(0,0,0,.72),
-            rgba(0,0,0,.90)
-        ),
-        url("{BACKGROUND_IMAGE}");
+    .stApp {{
+        background-image:
+            linear-gradient(
+                rgba(0,0,0,.72),
+                rgba(0,0,0,.90)
+            ),
+            url("{BACKGROUND_IMAGE}");
 
-    background-size: cover;
-    background-position: center;
-    background-attachment: fixed;
-}}
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
+    }}
 
-#MainMenu,
-footer,
-header {{
-    visibility: hidden;
-}}
+    #MainMenu,
+    footer,
+    header {{
+        visibility: hidden;
+    }}
 
 
-div.stButton > button {{
+    /* ========================================================
+       КНОПКИ
+       ======================================================== */
 
-    min-height: 46px !important;
+    div.stButton > button {{
 
-    border-radius: 14px !important;
+        min-height: 46px !important;
 
-    border:
-        1px solid
-        rgba(255,255,255,.14)
-        !important;
+        border-radius: 14px !important;
 
-    background:
-        linear-gradient(
-            135deg,
-            rgba(45,45,53,.98),
-            rgba(18,18,23,.98)
-        )
-        !important;
+        border:
+            1px solid
+            rgba(255,255,255,.14)
+            !important;
 
-    color: #fff !important;
+        background:
+            linear-gradient(
+                135deg,
+                rgba(45,45,53,.98),
+                rgba(18,18,23,.98)
+            )
+            !important;
 
-    font-weight: 700 !important;
+        color: #fff !important;
 
-    box-shadow:
-        0 7px 20px
-        rgba(0,0,0,.35);
+        font-weight: 700 !important;
 
-    transition:
-        transform .10s ease,
-        box-shadow .10s ease,
-        filter .10s ease;
-}}
+        box-shadow:
+            0 7px 20px
+            rgba(0,0,0,.35);
 
+        transition:
+            transform .10s ease,
+            box-shadow .10s ease,
+            filter .10s ease;
+    }}
 
-div.stButton > button:hover {{
 
-    border-color:
-        rgba(54,162,235,.65)
-        !important;
+    div.stButton > button:hover {{
 
-    box-shadow:
-        0 10px 28px
-        rgba(0,0,0,.45);
-}}
+        border-color:
+            rgba(54,162,235,.65)
+            !important;
 
+        box-shadow:
+            0 10px 28px
+            rgba(0,0,0,.45);
+    }}
 
-div.stButton > button:active {{
 
-    transform:
-        translateY(2px)
-        scale(.985)
-        !important;
+    div.stButton > button:active {{
 
-    box-shadow:
-        inset 0 3px 9px
-        rgba(0,0,0,.65)
-        !important;
+        transform:
+            translateY(2px)
+            scale(.985)
+            !important;
 
-    filter:
-        brightness(.82);
-}}
+        box-shadow:
+            inset 0 3px 9px
+            rgba(0,0,0,.65)
+            !important;
 
+        filter: brightness(.82);
+    }}
 
-div[data-testid="stTextInput"] input,
-div[data-testid="stNumberInput"] input {{
 
-    border-radius:
-        12px !important;
+    /* ========================================================
+       INPUTS
+       ======================================================== */
 
-    background:
-        rgba(18,18,22,.94)
-        !important;
+    div[data-testid="stTextInput"] input,
+    div[data-testid="stNumberInput"] input {{
 
-    color:
-        #fff !important;
-}}
+        border-radius: 12px !important;
 
+        background:
+            rgba(18,18,22,.94)
+            !important;
 
-div[data-testid="stVerticalBlockBorderWrapper"] {{
+        color: #fff !important;
+    }}
 
-    background:
-        rgba(15,17,22,.78);
 
-    border-radius:
-        14px;
-}}
+    div[data-testid="stVerticalBlockBorderWrapper"] {{
 
+        background:
+            rgba(15,17,22,.78);
 
-.log-card {{
+        border-radius: 14px;
+    }}
 
-    padding:
-        14px;
 
-    border:
-        1px solid
-        rgba(255,255,255,.13);
+    /* ========================================================
+       СТАРІ CSS-КЛАСИ — ЗАЛИШАЄМО ДЛЯ СУМІСНОСТІ
+       ======================================================== */
 
-    border-radius:
-        16px;
+    .log-card {{
 
-    background:
-        rgba(10,12,16,.72);
+        padding: 14px;
 
-    margin-bottom:
-        10px;
-}}
+        border:
+            1px solid
+            rgba(255,255,255,.13);
 
+        border-radius: 16px;
 
-.log-head {{
+        background:
+            rgba(10,12,16,.72);
 
-    display:
-        flex;
+        margin-bottom: 10px;
+    }}
 
-    justify-content:
-        space-between;
 
-    gap:
-        12px;
+    .log-head {{
 
-    align-items:
-        flex-start;
-}}
+        display: flex;
 
+        justify-content: space-between;
 
-.log-title {{
+        gap: 12px;
 
-    font-size:
-        17px;
+        align-items: flex-start;
+    }}
 
-    font-weight:
-        800;
 
-    line-height:
-        1.35;
+    .log-title {{
 
-    word-break:
-        break-word;
-}}
+        font-size: 17px;
 
+        font-weight: 800;
 
-.log-kcal {{
+        line-height: 1.35;
 
-    white-space:
-        nowrap;
+        word-break: break-word;
+    }}
 
-    font-size:
-        16px;
 
-    font-weight:
-        900;
-}}
+    .log-kcal {{
 
+        white-space: nowrap;
 
-.log-sub {{
+        font-size: 16px;
 
-    margin-top:
-        8px;
+        font-weight: 900;
+    }}
 
-    color:
-        #bfc3cc;
 
-    font-size:
-        12px;
-}}
+    .log-sub {{
 
+        margin-top: 8px;
 
-.balance-card {{
+        color: #bfc3cc;
 
-    margin:
-        10px 0 16px;
+        font-size: 12px;
+    }}
 
-    padding:
-        16px;
 
-    border-radius:
-        18px;
+    .balance-card {{
 
-    background:
-        rgba(15,17,22,.84);
+        margin: 10px 0 16px;
 
-    border:
-        1px solid
-        rgba(255,255,255,.12);
+        padding: 16px;
 
-    text-align:
-        center;
-}}
+        border-radius: 18px;
 
+        background:
+            rgba(15,17,22,.84);
 
-.balance-main {{
+        border:
+            1px solid
+            rgba(255,255,255,.12);
 
-    font-size:
-        26px;
+        text-align: center;
+    }}
 
-    font-weight:
-        900;
-}}
 
+    .balance-main {{
 
-.balance-sub {{
+        font-size: 26px;
 
-    color:
-        #b8bcc5;
+        font-weight: 900;
+    }}
 
-    font-size:
-        13px;
 
-    margin-top:
-        6px;
-}}
+    .balance-sub {{
 
+        color: #b8bcc5;
 
-.deficit {{
-    color:
-        #35D07F;
-}}
+        font-size: 13px;
 
-.surplus {{
-    color:
-        #FF6262;
-}}
+        margin-top: 6px;
+    }}
 
-.neutral {{
-    color:
-        #FFD166;
-}}
 
+    .deficit {{
+        color: #35D07F;
+    }}
 
-.donut-wrap {{
+    .surplus {{
+        color: #FF6262;
+    }}
 
-    width:
-        280px;
+    .neutral {{
+        color: #FFD166;
+    }}
 
-    height:
-        280px;
-
-    margin:
-        0 auto 8px;
-
-    display:
-        flex;
-
-    align-items:
-        center;
-
-    justify-content:
-        center;
-}}
-
-
-.donut {{
-
-    width:
-        220px;
-
-    height:
-        220px;
-
-    border-radius:
-        50%;
-
-    display:
-        flex;
-
-    align-items:
-        center;
-
-    justify-content:
-        center;
-
-    box-shadow:
-        0 0 30px
-        rgba(0,0,0,.65);
-}}
-
-
-.donut-hole {{
-
-    width:
-        158px;
-
-    height:
-        158px;
-
-    border-radius:
-        50%;
-
-    background:
-        #15171c;
-
-    display:
-        flex;
-
-    flex-direction:
-        column;
-
-    align-items:
-        center;
-
-    justify-content:
-        center;
-
-    text-align:
-        center;
-
-    box-shadow:
-        inset 0 0 22px
-        rgba(0,0,0,.9);
-
-    padding:
-        8px;
-}}
-
-
-.donut-status {{
-
-    font-size:
-        13px;
-
-    font-weight:
-        900;
-}}
-
-
-.donut-main {{
-
-    font-size:
-        23px;
-
-    font-weight:
-        900;
-
-    margin-top:
-        3px;
-}}
-
-
-.donut-sub {{
-
-    color:
-        #c7c7c7;
-
-    font-size:
-        10px;
-
-    margin-top:
-        6px;
-}}
-
-</style>
-""",
+    </style>
+    """,
     unsafe_allow_html=True,
 )
 
@@ -719,17 +400,13 @@ div[data-testid="stVerticalBlockBorderWrapper"] {{
 
 for key, default in {
 
-    "settings_open":
-        False,
+    "settings_open": False,
 
-    "editor_open":
-        False,
+    "editor_open": False,
 
-    "undo_stack":
-        [],
+    "undo_stack": [],
 
-    "input_nonce":
-        0,
+    "input_nonce": 0,
 
 }.items():
 
@@ -745,12 +422,8 @@ for key, default in {
 try:
 
     api_key = (
-        st.secrets.get(
-            "GEMINI_API_KEY"
-        )
-        or os.environ.get(
-            "GEMINI_API_KEY"
-        )
+        st.secrets.get("GEMINI_API_KEY")
+        or os.environ.get("GEMINI_API_KEY")
     )
 
 except Exception:
@@ -778,9 +451,10 @@ client = genai.Client(
     api_key=api_key
 )
 
+
 GEMINI_MODEL = os.environ.get(
     "GEMINI_MODEL",
-    "gemini-3.6-flash"
+    "gemini-3.6-flash",
 )
 
 
@@ -799,17 +473,14 @@ TRASH_FILE = (
 
 DEFAULT_SETTINGS = {
 
-    "calories":
-        2000,
+    "calories": 2000,
 
-    "bmr_daily":
-        1850,
+    "bmr_daily": 1850,
 
-    "initial_weight":
-        89.0,
+    "initial_weight": 89.0,
 
-    "include_exercise_in_deficit":
-        True,
+    "include_exercise_in_deficit": True,
+
 }
 
 
@@ -826,7 +497,7 @@ def load_settings():
         with open(
             SETTINGS_FILE,
             "r",
-            encoding="utf-8"
+            encoding="utf-8",
         ) as f:
 
             data = json.load(f)
@@ -847,14 +518,14 @@ def save_settings(data):
     with open(
         SETTINGS_FILE,
         "w",
-        encoding="utf-8"
+        encoding="utf-8",
     ) as f:
 
         json.dump(
             data,
             f,
             ensure_ascii=False,
-            indent=2
+            indent=2,
         )
 
 
@@ -953,9 +624,7 @@ def normalize_dataframe(df):
 
                 df[col] = ""
 
-    df = df[
-        COLUMNS
-    ].copy()
+    df = df[COLUMNS].copy()
 
     for col in [
         "Спожито",
@@ -968,7 +637,7 @@ def normalize_dataframe(df):
         df[col] = (
             pd.to_numeric(
                 df[col],
-                errors="coerce"
+                errors="coerce",
             )
             .fillna(0.0)
         )
@@ -987,11 +656,17 @@ def normalize_dataframe(df):
     return df
 
 
+# ============================================================
+# GOOGLE SHEETS DATA
+# ============================================================
+
 def load_data():
 
     try:
 
-        ws = get_worksheet()
+        ws = get_worksheet(
+            sheet_tab
+        )
 
         rows = ws.get_all_records()
 
@@ -1013,26 +688,143 @@ def load_data():
         return empty_dataframe()
 
 
+def sheet_row_values(row):
+
+    return [
+
+        clean_text(
+            row.get("Дата", "")
+        ),
+
+        clean_text(
+            row.get("Час", "")
+        ),
+
+        clean_text(
+            row.get("Опис", "")
+        ),
+
+        clean_text(
+            row.get("Тип", "Їжа")
+        ) or "Їжа",
+
+        clean_number(
+            row.get("Спожито", 0)
+        ),
+
+        clean_number(
+            row.get("Спалено", 0)
+        ),
+
+        clean_number(
+            row.get("Білки", 0)
+        ),
+
+        clean_number(
+            row.get("Жири", 0)
+        ),
+
+        clean_number(
+            row.get("Вуглеводи", 0)
+        ),
+
+    ]
+
+
+def append_entry(row):
+
+    ws = get_worksheet(
+        sheet_tab
+    )
+
+    ws.append_row(
+        sheet_row_values(row),
+        value_input_option="USER_ENTERED",
+    )
+
+
+def delete_last_entry():
+
+    ws = get_worksheet(
+        sheet_tab
+    )
+
+    values = ws.get_all_values()
+
+    if len(values) <= 1:
+
+        return None
+
+    last = values[-1]
+
+    ws.delete_rows(
+        len(values)
+    )
+
+    return dict(
+        zip(
+            COLUMNS,
+            (
+                last
+                + [""] * len(COLUMNS)
+            )[:len(COLUMNS)],
+        )
+    )
+
+
+def replace_all_data(df):
+
+    ws = get_worksheet(
+        sheet_tab
+    )
+
+    clean = normalize_dataframe(
+        df
+    )
+
+    ws.clear()
+
+    ws.update(
+        "A1:I1",
+        [COLUMNS],
+        value_input_option="USER_ENTERED",
+    )
+
+    if not clean.empty:
+
+        values = [
+            sheet_row_values(row)
+            for _, row
+            in clean.iterrows()
+        ]
+
+        ws.update(
+            f"A2:I{len(values)+1}",
+            values,
+            value_input_option="USER_ENTERED",
+        )
+
+
 # ============================================================
 # ВАГА
 # ============================================================
 
 def calculate_current_weight(
     dataframe,
-    profile_settings
+    profile_settings,
 ):
 
     initial_weight = clean_number(
         profile_settings.get(
             "initial_weight",
-            89.0
+            89.0,
         )
     )
 
     bmr_daily = clean_number(
         profile_settings.get(
             "bmr_daily",
-            1850
+            1850,
         )
     )
 
@@ -1046,9 +838,7 @@ def calculate_current_weight(
 
     today = datetime.now(
         LOCAL_TZ
-    ).strftime(
-        "%Y-%m-%d"
-    )
+    ).strftime("%Y-%m-%d")
 
     now = datetime.now(
         LOCAL_TZ
@@ -1088,29 +878,23 @@ def calculate_current_weight(
 
             bmr = bmr_daily
 
-        if profile_settings.get(
-            "include_exercise_in_deficit",
-            True
-        ):
-
-            burned = (
-                bmr
-                + exercise
+        burned = (
+            bmr + exercise
+            if profile_settings.get(
+                "include_exercise_in_deficit",
+                True,
             )
-
-        else:
-
-            burned = bmr
+            else bmr
+        )
 
         total_balance += (
-            burned
-            - eaten
+            burned - eaten
         )
 
     return max(
         0.0,
         initial_weight
-        - total_balance / 7700.0
+        - total_balance / 7700.0,
     )
 
 
@@ -1128,14 +912,8 @@ def parse_json_response(text):
 
         raw = (
             raw
-            .replace(
-                "```json",
-                ""
-            )
-            .replace(
-                "```",
-                ""
-            )
+            .replace("```json", "")
+            .replace("```", "")
             .strip()
         )
 
@@ -1147,20 +925,24 @@ def analyze_entry(user_text):
     prompt = """
 
 Ти фітнес-трекер.
+
 Проаналізуй один запис користувача.
 
 Визнач, це Їжа або Тренування.
 
 Для Їжа:
-оцінюй спожиті ккал та БЖВ.
+- оцінюй спожиті ккал;
+- оцінюй білки;
+- оцінюй жири;
+- оцінюй вуглеводи.
 
 Для Тренування:
-оцінюй спалені ккал,
-а спожиті ккал і БЖВ став 0.
+- оцінюй спалені ккал;
+- спожиті ккал = 0;
+- БЖВ = 0.
 
-Не вигадуй складні назви —
-опис має бути коротким
-і зрозумілим.
+Не вигадуй складні назви.
+Опис має бути коротким і зрозумілим.
 
 Поверни ТІЛЬКИ JSON:
 
@@ -1174,8 +956,7 @@ def analyze_entry(user_text):
   "carbs": 0
 }
 
-Усі числа — числа,
-не рядки.
+Усі числа — числа, не рядки.
 
 """
 
@@ -1190,8 +971,7 @@ def analyze_entry(user_text):
         ),
 
         config=types.GenerateContentConfig(
-            response_mime_type=
-                "application/json"
+            response_mime_type="application/json"
         ),
     )
 
@@ -1202,13 +982,13 @@ def analyze_entry(user_text):
     entry_type = clean_text(
         result.get(
             "type",
-            "Їжа"
+            "Їжа",
         )
     )
 
     if entry_type not in {
         "Їжа",
-        "Тренування"
+        "Тренування",
     }:
 
         entry_type = "Їжа"
@@ -1218,9 +998,9 @@ def analyze_entry(user_text):
         clean_number(
             result.get(
                 "consumed_kcal",
-                0
+                0,
             )
-        )
+        ),
     )
 
     burned = max(
@@ -1228,9 +1008,9 @@ def analyze_entry(user_text):
         clean_number(
             result.get(
                 "burned_kcal",
-                0
+                0,
             )
-        )
+        ),
     )
 
     protein = max(
@@ -1238,9 +1018,9 @@ def analyze_entry(user_text):
         clean_number(
             result.get(
                 "protein",
-                0
+                0,
             )
-        )
+        ),
     )
 
     fat = max(
@@ -1248,9 +1028,9 @@ def analyze_entry(user_text):
         clean_number(
             result.get(
                 "fat",
-                0
+                0,
             )
-        )
+        ),
     )
 
     carbs = max(
@@ -1258,9 +1038,9 @@ def analyze_entry(user_text):
         clean_number(
             result.get(
                 "carbs",
-                0
+                0,
             )
-        )
+        ),
     )
 
     if entry_type == "Тренування":
@@ -1277,32 +1057,27 @@ def analyze_entry(user_text):
 
     return {
 
-        "description":
+        "description": (
             clean_text(
                 result.get(
                     "description",
-                    ""
+                    "",
                 )
             )
-            or user_text.strip(),
+            or user_text.strip()
+        ),
 
-        "type":
-            entry_type,
+        "type": entry_type,
 
-        "consumed_kcal":
-            consumed,
+        "consumed_kcal": consumed,
 
-        "burned_kcal":
-            burned,
+        "burned_kcal": burned,
 
-        "protein":
-            protein,
+        "protein": protein,
 
-        "fat":
-            fat,
+        "fat": fat,
 
-        "carbs":
-            carbs,
+        "carbs": carbs,
     }
 
 
@@ -1314,7 +1089,7 @@ df = load_data()
 
 current_weight = calculate_current_weight(
     df,
-    settings
+    settings,
 )
 
 
@@ -1324,13 +1099,10 @@ st.title(
 
 
 st.markdown(
-
     f"""
 ### 📅 {datetime.now(LOCAL_TZ).strftime('%Y-%m-%d')}
-| Поточна вага:
-~{current_weight:.1f} кг
+### ⚖️ Поточна вага: ~{current_weight:.1f} кг
 """
-
 )
 
 
@@ -1361,14 +1133,13 @@ user_input = st.text_input(
 if st.button(
     "✅ ОК",
     type="primary",
-    use_container_width=True
+    use_container_width=True,
 ):
 
     if not user_input.strip():
 
         st.warning(
-            "Введи продукт "
-            "або тренування."
+            "Введи продукт або тренування."
         )
 
     else:
@@ -1431,9 +1202,7 @@ if st.button(
                     ],
             }
 
-            append_entry(
-                row
-            )
+            append_entry(row)
 
             st.session_state.undo_stack.append(
                 {
@@ -1443,12 +1212,12 @@ if st.button(
             )
 
             st.session_state.undo_stack = (
-                st.session_state.undo_stack[-10:]
+                st.session_state.undo_stack[
+                    -10:
+                ]
             )
 
-            # Після успішного запису
-            # поле повністю очищується.
-
+            # Очищаємо поле після успішного запису.
             st.session_state.input_nonce += 1
 
             st.success(
@@ -1461,8 +1230,7 @@ if st.button(
         except Exception as e:
 
             st.error(
-                f"❌ Не вдалося "
-                f"додати запис: {e}"
+                f"❌ Не вдалося додати запис: {e}"
             )
 
 
@@ -1472,21 +1240,17 @@ if st.button(
 
 today = datetime.now(
     LOCAL_TZ
-).strftime(
-    "%Y-%m-%d"
-)
+).strftime("%Y-%m-%d")
 
 
-dates = [
-    today
-]
+dates = [today]
 
 
 if not df.empty:
 
     for d in sorted(
         df["Дата"].unique(),
-        reverse=True
+        reverse=True,
     ):
 
         d = clean_text(d)
@@ -1498,7 +1262,7 @@ if not df.empty:
 
 selected_date = st.selectbox(
     "📅 День",
-    dates
+    dates,
 )
 
 
@@ -1506,16 +1270,14 @@ selected_date = st.selectbox(
 # КНОПКИ КЕРУВАННЯ
 # ============================================================
 
-col1, col2, col3 = st.columns(
-    3
-)
+col1, col2, col3 = st.columns(3)
 
 
 with col1:
 
     undo_clicked = st.button(
         "↩️ Відмінити",
-        use_container_width=True
+        use_container_width=True,
     )
 
 
@@ -1523,7 +1285,7 @@ with col2:
 
     delete_clicked = st.button(
         "🗑️ Видалити останній",
-        use_container_width=True
+        use_container_width=True,
     )
 
 
@@ -1531,92 +1293,25 @@ with col3:
 
     settings_clicked = st.button(
         "✏️ Редактор",
-        use_container_width=True
+        use_container_width=True,
     )
 
 
-def find_matching_row_index(
-    dataframe,
-    row
-):
+# ============================================================
+# UNDO
+# ============================================================
 
-    if dataframe.empty:
+def remove_matching_last_row(row):
 
-        return None
-
-    matches = (
-
-        dataframe["Дата"]
-        .astype(str)
-        .eq(
-            clean_text(
-                row.get(
-                    "Дата",
-                    ""
-                )
-            )
-        )
-
-        & dataframe["Час"]
-        .astype(str)
-        .eq(
-            clean_text(
-                row.get(
-                    "Час",
-                    ""
-                )
-            )
-        )
-
-        & dataframe["Опис"]
-        .astype(str)
-        .eq(
-            clean_text(
-                row.get(
-                    "Опис",
-                    ""
-                )
-            )
-        )
-
-        & dataframe["Тип"]
-        .astype(str)
-        .eq(
-            clean_text(
-                row.get(
-                    "Тип",
-                    "Їжа"
-                )
-            )
-        )
+    ws = get_worksheet(
+        sheet_tab
     )
-
-    idx = dataframe.index[
-        matches
-    ]
-
-    return (
-        int(idx[-1])
-        if len(idx)
-        else None
-    )
-
-
-def remove_matching_last_row(
-    row
-):
-
-    ws = get_worksheet()
 
     values = ws.get_all_values()
 
     if len(values) <= 1:
 
         return False
-
-    # Для Undo видаляємо
-    # останній рядок, якщо він
-    # збігається з дією.
 
     last = values[-1]
 
@@ -1626,7 +1321,7 @@ def remove_matching_last_row(
             (
                 last
                 + [""] * len(COLUMNS)
-            )[:len(COLUMNS)]
+            )[:len(COLUMNS)],
         )
     )
 
@@ -1682,10 +1377,6 @@ def remove_matching_last_row(
     return False
 
 
-# ============================================================
-# ВІДМІНА
-# ============================================================
-
 if undo_clicked:
 
     try:
@@ -1701,9 +1392,7 @@ if undo_clicked:
         else:
 
             action = (
-                st.session_state
-                .undo_stack
-                .pop()
+                st.session_state.undo_stack.pop()
             )
 
             if action["action"] == "add":
@@ -1744,7 +1433,7 @@ if undo_clicked:
 
 
 # ============================================================
-# ВИДАЛЕННЯ
+# DELETE
 # ============================================================
 
 if delete_clicked:
@@ -1756,8 +1445,7 @@ if delete_clicked:
         if deleted is None:
 
             st.warning(
-                "Немає записів "
-                "для видалення."
+                "Немає записів для видалення."
             )
 
         else:
@@ -1765,14 +1453,14 @@ if delete_clicked:
             with open(
                 TRASH_FILE,
                 "w",
-                encoding="utf-8"
+                encoding="utf-8",
             ) as f:
 
                 json.dump(
                     deleted,
                     f,
                     ensure_ascii=False,
-                    indent=2
+                    indent=2,
                 )
 
             st.session_state.undo_stack.append(
@@ -1783,7 +1471,9 @@ if delete_clicked:
             )
 
             st.session_state.undo_stack = (
-                st.session_state.undo_stack[-10:]
+                st.session_state.undo_stack[
+                    -10:
+                ]
             )
 
             st.success(
@@ -1827,7 +1517,7 @@ if st.session_state.settings_open:
         value=int(
             settings.get(
                 "calories",
-                2000
+                2000,
             )
         ),
 
@@ -1844,7 +1534,7 @@ if st.session_state.settings_open:
         value=int(
             settings.get(
                 "bmr_daily",
-                1850
+                1850,
             )
         ),
 
@@ -1861,7 +1551,7 @@ if st.session_state.settings_open:
         value=float(
             settings.get(
                 "initial_weight",
-                89.0
+                89.0,
             )
         ),
 
@@ -1877,7 +1567,7 @@ if st.session_state.settings_open:
         value=bool(
             settings.get(
                 "include_exercise_in_deficit",
-                True
+                True,
             )
         ),
     )
@@ -1886,24 +1576,23 @@ if st.session_state.settings_open:
     if st.button(
         "💾 Зберегти",
         type="primary",
-        use_container_width=True
+        use_container_width=True,
     ):
 
-        save_settings(
-            {
-                "calories":
-                    new_calories,
+        save_settings({
 
-                "bmr_daily":
-                    new_bmr,
+            "calories":
+                new_calories,
 
-                "initial_weight":
-                    new_weight,
+            "bmr_daily":
+                new_bmr,
 
-                "include_exercise_in_deficit":
-                    new_exercise,
-            }
-        )
+            "initial_weight":
+                new_weight,
+
+            "include_exercise_in_deficit":
+                new_exercise,
+        })
 
         st.session_state.settings_open = False
 
@@ -1915,15 +1604,16 @@ if st.session_state.settings_open:
 
 
 # ============================================================
-# ПЕРЕЗАВАНТАЖЕНІ ДАНІ ПІСЛЯ ДІЙ
+# ОНОВЛЮЄМО ДАНІ
 # ============================================================
 
 df = load_data()
 
 current_weight = calculate_current_weight(
     df,
-    settings
+    settings,
 )
+
 
 if not df.empty:
 
@@ -1937,28 +1627,35 @@ else:
     day_df = empty_dataframe()
 
 
-consumed = (
-    float(
-        day_df["Спожито"].sum()
+if not day_df.empty:
+
+    consumed = float(
+        day_df[
+            "Спожито"
+        ].sum()
     )
-    if not day_df.empty
-    else 0.0
-)
 
-
-exercise_burned = (
-    float(
-        day_df["Спалено"].sum()
+    exercise_burned = float(
+        day_df[
+            "Спалено"
+        ].sum()
     )
-    if not day_df.empty
-    else 0.0
-)
 
+else:
+
+    consumed = 0.0
+
+    exercise_burned = 0.0
+
+
+# ============================================================
+# БМР
+# ============================================================
 
 bmr_daily = clean_number(
     settings.get(
         "bmr_daily",
-        1850
+        1850,
     )
 )
 
@@ -1984,9 +1681,13 @@ else:
     bmr_elapsed = bmr_daily
 
 
+# ============================================================
+# ВИТРАТИ
+# ============================================================
+
 if settings.get(
     "include_exercise_in_deficit",
-    True
+    True,
 ):
 
     total_burned = (
@@ -2006,7 +1707,7 @@ balance = (
 
 
 # ============================================================
-# СТАН
+# СТАТУС
 # ============================================================
 
 if balance > 0:
@@ -2061,9 +1762,9 @@ target = max(
     clean_number(
         settings.get(
             "calories",
-            2000
+            2000,
         )
-    )
+    ),
 )
 
 
@@ -2072,9 +1773,9 @@ if target > 0:
     eaten_share = min(
         max(
             consumed / target,
-            0.0
+            0.0,
         ),
-        1.0
+        1.0,
     )
 
 else:
@@ -2087,79 +1788,211 @@ eaten_deg = (
 )
 
 
-if (
-    consumed <= target
-    and target > 0
-):
+if consumed <= target and target > 0:
 
     ring_background = (
 
-        f"conic-gradient("
-        f"#36A2EB "
-        f"0deg "
+        "conic-gradient("
+        f"#36A2EB 0deg "
         f"{eaten_deg:.2f}deg, "
-
         f"#2b2e36 "
         f"{eaten_deg:.2f}deg "
-        f"360deg"
-        f")"
+        "360deg)"
     )
 
 else:
 
     ring_background = (
         "conic-gradient("
-        "#36A2EB "
-        "0deg 360deg"
-        ")"
+        "#36A2EB 0deg 360deg)"
     )
 
 
+# ============================================================
+# КРУЖОК — РЕНДЕРИМО ЯК СПРАВЖНІЙ HTML
+# ============================================================
+
 donut_html = f"""
 
-<div class="donut-wrap">
+<!doctype html>
 
-    <div
-        class="donut"
-        style="
-            background:
-                {ring_background};
-        "
-    >
+<html lang="uk">
 
-        <div class="donut-hole">
+<head>
 
-            <div
-                class="donut-status"
-                style="
-                    color:
-                        {status_color};
-                "
-            >
+<meta charset="utf-8">
+
+<meta
+    name="viewport"
+    content="width=device-width,
+             initial-scale=1"
+>
+
+<style>
+
+* {{
+    box-sizing: border-box;
+}}
+
+html,
+body {{
+
+    margin: 0;
+
+    padding: 0;
+
+    background: transparent;
+}}
+
+
+body {{
+
+    min-height: 300px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    font-family:
+        Arial,
+        sans-serif;
+
+    color: #fff;
+}}
+
+
+.wrap {{
+
+    width: 280px;
+
+    height: 290px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+}}
+
+
+.donut {{
+
+    width: 230px;
+
+    height: 230px;
+
+    border-radius: 50%;
+
+    background:
+        {ring_background};
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    box-shadow:
+        0 0 30px
+        rgba(0,0,0,.55);
+}}
+
+
+.hole {{
+
+    width: 164px;
+
+    height: 164px;
+
+    border-radius: 50%;
+
+    background: #15171c;
+
+    display: flex;
+
+    flex-direction: column;
+
+    align-items: center;
+
+    justify-content: center;
+
+    text-align: center;
+
+    padding: 10px;
+
+    box-shadow:
+        inset 0 0 22px
+        rgba(0,0,0,.9);
+}}
+
+
+.status {{
+
+    color:
+        {status_color};
+
+    font-size: 13px;
+
+    font-weight: 900;
+}}
+
+
+.main {{
+
+    color: #fff;
+
+    font-size: 25px;
+
+    font-weight: 900;
+
+    margin-top: 4px;
+}}
+
+
+.sub {{
+
+    color: #c7c7c7;
+
+    font-size: 11px;
+
+    margin-top: 7px;
+}}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="wrap">
+
+    <div class="donut">
+
+        <div class="hole">
+
+            <div class="status">
                 {status_icon}
                 {status_label}
             </div>
 
-
-            <div class="donut-main">
+            <div class="main">
                 {consumed:.0f}
             </div>
 
-
-            <div class="donut-sub">
-                🍽️ з'їдено /
+            <div class="sub">
+                🍽️ З'їдено /
                 {target:.0f} ккал
             </div>
 
-
-            <div class="donut-sub">
+            <div class="sub">
                 🔥 БМР:
                 {bmr_daily:.0f}
                 ккал/добу
             </div>
 
-
-            <div class="donut-sub">
+            <div class="sub">
                 ⚖️
                 {current_weight:.1f}
                 кг
@@ -2171,12 +2004,17 @@ donut_html = f"""
 
 </div>
 
+</body>
+
+</html>
+
 """
 
 
-st.markdown(
+components.html(
     donut_html,
-    unsafe_allow_html=True
+    height=300,
+    scrolling=False,
 )
 
 
@@ -2189,16 +2027,14 @@ st.subheader(
 )
 
 
-s1, s2, s3 = st.columns(
-    3
-)
+s1, s2, s3 = st.columns(3)
 
 
 with s1:
 
     st.metric(
         "🍽️ З'їдено",
-        f"{consumed:.0f} ккал"
+        f"{consumed:.0f} ккал",
     )
 
 
@@ -2206,7 +2042,7 @@ with s2:
 
     st.metric(
         "🎯 Добова норма",
-        f"{target:.0f} ккал"
+        f"{target:.0f} ккал",
     )
 
 
@@ -2214,7 +2050,7 @@ with s3:
 
     st.metric(
         "🔥 Витрачено",
-        f"{total_burned:.0f} ккал"
+        f"{total_burned:.0f} ккал",
     )
 
 
@@ -2223,9 +2059,9 @@ if target > 0:
     progress_value = min(
         max(
             consumed / target,
-            0.0
+            0.0,
         ),
-        1.0
+        1.0,
     )
 
 else:
@@ -2262,28 +2098,30 @@ if day_df.empty:
 
 else:
 
-    for _, row in day_df.iloc[::-1].iterrows():
+    for _, row in (
+        day_df
+        .iloc[::-1]
+        .iterrows()
+    ):
 
         time_value = clean_text(
             row.get(
                 "Час",
-                ""
+                "",
             )
         )[:5]
-
 
         description = clean_text(
             row.get(
                 "Опис",
-                ""
+                "",
             )
         )
-
 
         row_type = clean_text(
             row.get(
                 "Тип",
-                "Їжа"
+                "Їжа",
             )
         ) or "Їжа"
 
@@ -2295,7 +2133,7 @@ else:
             kcal = clean_number(
                 row.get(
                     "Спалено",
-                    0
+                    0,
                 )
             )
 
@@ -2312,7 +2150,7 @@ else:
             kcal = clean_number(
                 row.get(
                     "Спожито",
-                    0
+                    0,
                 )
             )
 
@@ -2326,75 +2164,64 @@ else:
         protein = clean_number(
             row.get(
                 "Білки",
-                0
+                0,
             )
         )
-
 
         fat = clean_number(
             row.get(
                 "Жири",
-                0
+                0,
             )
         )
-
 
         carbs = clean_number(
             row.get(
                 "Вуглеводи",
-                0
+                0,
             )
         )
 
 
-        st.markdown(
+        # ====================================================
+        # ВАЖЛИВО:
+        # БІЛЬШЕ НЕ ВИКОРИСТОВУЄМО HTML ДЛЯ ВЛОГУ
+        # ====================================================
 
-            f"""
-<div class="log-card">
+        with st.container(
+            border=True
+        ):
 
-    <div class="log-head">
-
-        <div class="log-title">
-            {time_value}
-            {icon}
-            {description}
-        </div>
-
-        <div
-            class="log-kcal"
-            style="
-                color:
-                    {kcal_color};
-            "
-        >
-            {kcal_text}
-        </div>
-
-    </div>
+            left, right = st.columns(
+                [4, 1]
+            )
 
 
-    <div class="log-sub">
+            with left:
 
-        Білки:
-        {protein:.1f} г
+                st.markdown(
+                    f"**{time_value} "
+                    f"{icon} "
+                    f"{description}**"
+                )
 
-        &nbsp;•&nbsp;
 
-        Жири:
-        {fat:.1f} г
+            with right:
 
-        &nbsp;•&nbsp;
+                st.markdown(
+                    f"**{kcal_text}**"
+                )
 
-        Вуглеводи:
-        {carbs:.1f} г
 
-    </div>
+            st.caption(
 
-</div>
-""",
-
-            unsafe_allow_html=True
-        )
+                f"Білки: "
+                f"{protein:.1f} г "
+                f"• Жири: "
+                f"{fat:.1f} г "
+                f"• Вуглеводи: "
+                f"{carbs:.1f} г"
+            )
 
 
 # ============================================================
@@ -2404,36 +2231,23 @@ else:
 st.divider()
 
 
-st.markdown(
+with st.container(
+    border=True
+):
 
-    f"""
-<div class="balance-card">
+    st.markdown(
+        f"### "
+        f"{status_icon} "
+        f"{status_label}: "
+        f"{balance_text}"
+    )
 
-    <div
-        class="balance-main
-        {status_class}"
-    >
-        {status_icon}
-        {status_label}:
-        {balance_text}
-    </div>
-
-
-    <div class="balance-sub">
-
-        З'їдено:
-        {consumed:.0f} ккал
-
-        • Витрачено:
-        {total_burned:.0f} ккал
-
-    </div>
-
-</div>
-""",
-
-    unsafe_allow_html=True
-)
+    st.caption(
+        f"З'їдено: "
+        f"{consumed:.0f} ккал "
+        f"• Витрачено: "
+        f"{total_burned:.0f} ккал"
+    )
 
 
 st.caption(
@@ -2453,7 +2267,9 @@ with st.expander(
 
     try:
 
-        ws = get_worksheet()
+        ws = get_worksheet(
+            sheet_tab
+        )
 
         st.success(
             "Google Sheets підключено: "
@@ -2475,8 +2291,8 @@ with st.expander(
 
             "Service Account має бути "
             "Editor саме для цієї таблиці. "
-            "Також у Google Cloud мають бути "
-            "увімкнені Google Sheets API "
-            "та Google Drive API."
 
+            "Також у Google Cloud мають "
+            "бути увімкнені Google Sheets API "
+            "та Google Drive API."
 )
