@@ -243,7 +243,7 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 # Використовуємо актуальне ім'я моделі
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 
 # ============================================================
 # НАЛАШТУВАННЯ
