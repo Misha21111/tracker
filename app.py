@@ -13,13 +13,13 @@ from google.genai import types
 # STREAMLIT
 # ============================================================
 st.set_page_config(
-    page_title="Мій Фітнес",
-    page_icon="⚖️",
+    page_title="РњС–Р№ Р¤С–С‚РЅРµСЃ",
+    page_icon="вљ–пёЏ",
     layout="centered",
 )
 
 # ============================================================
-# ЧАСОВИЙ ПОЯС
+# Р§РђРЎРћР’РР™ РџРћРЇРЎ
 # ============================================================
 try:
     from zoneinfo import ZoneInfo
@@ -28,19 +28,19 @@ except Exception:
     LOCAL_TZ = timezone(timedelta(hours=2))
 
 # ============================================================
-# ПРОФІЛЬ
+# РџР РћР¤Р†Р›Р¬
 # ============================================================
-profile = st.sidebar.selectbox("👤 Профіль", ["Я", "Дружина"])
-profile_id = "user1" if profile == "Я" else "user2"
-sheet_tab = "Я" if profile == "Я" else "Дружина"
+profile = st.sidebar.selectbox("рџ‘¤ РџСЂРѕС„С–Р»СЊ", ["РЇ", "Р”СЂСѓР¶РёРЅР°"])
+profile_id = "user1" if profile == "РЇ" else "user2"
+sheet_tab = "РЇ" if profile == "РЇ" else "Р”СЂСѓР¶РёРЅР°"
 
 # ============================================================
 # GOOGLE SHEETS
 # ============================================================
 SPREADSHEET_ID = "1Blo5R_ZDOeAgVkRwXDfY1Wpw12QVrZMVUEfmY_Jlk_U"
 COLUMNS = [
-    "Дата", "Час", "Опис", "Тип", "Спожито", "Спалено",
-    "Білки", "Жири", "Вуглеводи",
+    "Р”Р°С‚Р°", "Р§Р°СЃ", "РћРїРёСЃ", "РўРёРї", "РЎРїРѕР¶РёС‚Рѕ", "РЎРїР°Р»РµРЅРѕ",
+    "Р‘С–Р»РєРё", "Р–РёСЂРё", "Р’СѓРіР»РµРІРѕРґРё",
 ]
 
 @st.cache_resource(show_spinner=False)
@@ -59,8 +59,8 @@ def get_gspread_client():
         )
     else:
         raise RuntimeError(
-            "Не знайдено gcp_service_account у Streamlit Secrets "
-            "і немає service_account.json."
+            "РќРµ Р·РЅР°Р№РґРµРЅРѕ gcp_service_account Сѓ Streamlit Secrets "
+            "С– РЅРµРјР°С” service_account.json."
         )
 
     return gspread.authorize(credentials)
@@ -79,13 +79,15 @@ def get_worksheet():
     if not values:
         ws.append_row(COLUMNS, value_input_option="USER_ENTERED")
     elif values[0][:len(COLUMNS)] != COLUMNS:
+        # РЇРєС‰Рѕ РІРєР»Р°РґРєР° СЃС‚Р°СЂР°/РїРѕСЂРѕР¶РЅСЏ Р·Р° СЃС‚СЂСѓРєС‚СѓСЂРѕСЋ вЂ” РЅРµ СЃС‚РёСЂР°С”РјРѕ РґР°РЅС–.
+        # РџСЂРѕСЃС‚Рѕ РіР°СЂР°РЅС‚СѓС”РјРѕ, С‰Рѕ РїРµСЂС€РёР№ СЂСЏРґРѕРє РјР°С” РїРѕС‚СЂС–Р±РЅС– Р·Р°РіРѕР»РѕРІРєРё.
         if len(values[0]) < len(COLUMNS):
             ws.update("A1:I1", [COLUMNS], value_input_option="USER_ENTERED")
 
     return ws
 
 # ============================================================
-# ФОН + CSS
+# Р¤РћРќ + CSS
 # ============================================================
 BACKGROUND_IMAGE = (
     "https://i.postimg.cc/kMS67m1J/"
@@ -229,7 +231,7 @@ for key, default in {
         st.session_state[key] = default
 
 # ============================================================
-# GEMINI (ВИПРАВЛЕНО ДЛЯ РОБОТИ З API)
+# GEMINI
 # ============================================================
 try:
     api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
@@ -237,16 +239,15 @@ except Exception:
     api_key = os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
-    st.error("⚠️ Не знайдено GEMINI_API_KEY.")
-    st.info("Додай GEMINI_API_KEY у Streamlit Secrets.")
+    st.error("вљ пёЏ РќРµ Р·РЅР°Р№РґРµРЅРѕ GEMINI_API_KEY.")
+    st.info("Р”РѕРґР°Р№ GEMINI_API_KEY Сѓ Streamlit Secrets.")
     st.stop()
 
 client = genai.Client(api_key=api_key)
-# Використовуємо актуальне ім'я моделі
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 
 # ============================================================
-# НАЛАШТУВАННЯ
+# РќРђР›РђРЁРўРЈР’РђРќРќРЇ
 # ============================================================
 SETTINGS_FILE = f"user_settings_{profile_id}.json"
 TRASH_FILE = f"fitness_trash_{profile_id}.json"
@@ -309,16 +310,16 @@ def normalize_dataframe(df):
     df = df.copy()
     for col in COLUMNS:
         if col not in df.columns:
-            if col in {"Спожито", "Спалено", "Білки", "Жири", "Вуглеводи"}:
+            if col in {"РЎРїРѕР¶РёС‚Рѕ", "РЎРїР°Р»РµРЅРѕ", "Р‘С–Р»РєРё", "Р–РёСЂРё", "Р’СѓРіР»РµРІРѕРґРё"}:
                 df[col] = 0
-            elif col == "Тип":
-                df[col] = "Їжа"
+            elif col == "РўРёРї":
+                df[col] = "Р‡Р¶Р°"
             else:
                 df[col] = ""
     df = df[COLUMNS].copy()
-    for col in ["Спожито", "Спалено", "Білки", "Жири", "Вуглеводи"]:
+    for col in ["РЎРїРѕР¶РёС‚Рѕ", "РЎРїР°Р»РµРЅРѕ", "Р‘С–Р»РєРё", "Р–РёСЂРё", "Р’СѓРіР»РµРІРѕРґРё"]:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
-    for col in ["Дата", "Час", "Опис", "Тип"]:
+    for col in ["Р”Р°С‚Р°", "Р§Р°СЃ", "РћРїРёСЃ", "РўРёРї"]:
         df[col] = df[col].map(clean_text)
     return df
 
@@ -328,20 +329,20 @@ def load_data():
         rows = ws.get_all_records()
         return normalize_dataframe(pd.DataFrame(rows)) if rows else empty_dataframe()
     except Exception as e:
-        st.error(f"❌ Не вдалося прочитати Google Sheets: {e}")
+        st.error(f"вќЊ РќРµ РІРґР°Р»РѕСЃСЏ РїСЂРѕС‡РёС‚Р°С‚Рё Google Sheets: {e}")
         return empty_dataframe()
 
 def sheet_row_values(row):
     return [
-        clean_text(row.get("Дата", "")),
-        clean_text(row.get("Час", "")),
-        clean_text(row.get("Опис", "")),
-        clean_text(row.get("Тип", "Їжа")) or "Їжа",
-        clean_number(row.get("Спожито", 0)),
-        clean_number(row.get("Спалено", 0)),
-        clean_number(row.get("Білки", 0)),
-        clean_number(row.get("Жири", 0)),
-        clean_number(row.get("Вуглеводи", 0)),
+        clean_text(row.get("Р”Р°С‚Р°", "")),
+        clean_text(row.get("Р§Р°СЃ", "")),
+        clean_text(row.get("РћРїРёСЃ", "")),
+        clean_text(row.get("РўРёРї", "Р‡Р¶Р°")) or "Р‡Р¶Р°",
+        clean_number(row.get("РЎРїРѕР¶РёС‚Рѕ", 0)),
+        clean_number(row.get("РЎРїР°Р»РµРЅРѕ", 0)),
+        clean_number(row.get("Р‘С–Р»РєРё", 0)),
+        clean_number(row.get("Р–РёСЂРё", 0)),
+        clean_number(row.get("Р’СѓРіР»РµРІРѕРґРё", 0)),
     ]
 
 def append_entry(row):
@@ -357,8 +358,18 @@ def delete_last_entry():
     ws.delete_rows(len(values))
     return dict(zip(COLUMNS, (last + [""] * len(COLUMNS))[:len(COLUMNS)]))
 
+def replace_all_data(df):
+    ws = get_worksheet()
+    clean = normalize_dataframe(df)
+    # РџРѕРІРЅС–СЃС‚СЋ РѕРЅРѕРІР»СЋС”РјРѕ С‚С–Р»СЊРєРё A:I, РЅРµ Р·Р°С‡С–РїР°СЋС‡Рё С–РЅС€С– РєРѕР»РѕРЅРєРё, СЏРєС‰Рѕ РІРѕРЅРё С”.
+    ws.clear()
+    ws.update("A1:I1", [COLUMNS], value_input_option="USER_ENTERED")
+    if not clean.empty:
+        values = [sheet_row_values(row) for _, row in clean.iterrows()]
+        ws.update(f"A2:I{len(values)+1}", values, value_input_option="USER_ENTERED")
+
 # ============================================================
-# ВАГА
+# Р’РђР“Рђ
 # ============================================================
 def calculate_current_weight(dataframe, profile_settings):
     initial_weight = clean_number(profile_settings.get("initial_weight", 89.0))
@@ -371,10 +382,10 @@ def calculate_current_weight(dataframe, profile_settings):
     now = datetime.now(LOCAL_TZ)
     total_balance = 0.0
 
-    for date_value in work["Дата"].unique():
-        day = work[work["Дата"] == date_value]
-        eaten = float(day["Спожито"].sum())
-        exercise = float(day["Спалено"].sum())
+    for date_value in work["Р”Р°С‚Р°"].unique():
+        day = work[work["Р”Р°С‚Р°"] == date_value]
+        eaten = float(day["РЎРїРѕР¶РёС‚Рѕ"].sum())
+        exercise = float(day["РЎРїР°Р»РµРЅРѕ"].sum())
         if date_value == today:
             hours = now.hour + now.minute / 60
             bmr = (bmr_daily / 24) * hours
@@ -386,7 +397,7 @@ def calculate_current_weight(dataframe, profile_settings):
     return max(0.0, initial_weight - total_balance / 7700.0)
 
 # ============================================================
-# GEMINI JSON PARSER
+# GEMINI JSON
 # ============================================================
 def parse_json_response(text):
     raw = (text or "").strip()
@@ -396,34 +407,34 @@ def parse_json_response(text):
 
 def analyze_entry(user_text):
     prompt = """
-Ти фітнес-трекер. Проаналізуй один запис користувача.
-Визнач, це Їжа або Тренування.
-Для Їжа: оцінюй спожиті ккал та БЖВ.
-Для Тренування: оцінюй спалені ккал, а спожиті ккал і БЖВ став 0.
-Не вигадуй складні назви — опис має бути коротким і зрозумілим.
+РўРё С„С–С‚РЅРµСЃ-С‚СЂРµРєРµСЂ. РџСЂРѕР°РЅР°Р»С–Р·СѓР№ РѕРґРёРЅ Р·Р°РїРёСЃ РєРѕСЂРёСЃС‚СѓРІР°С‡Р°.
+Р’РёР·РЅР°С‡, С†Рµ Р‡Р¶Р° Р°Р±Рѕ РўСЂРµРЅСѓРІР°РЅРЅСЏ.
+Р”Р»СЏ Р‡Р¶Р°: РѕС†С–РЅСЋР№ СЃРїРѕР¶РёС‚С– РєРєР°Р» С‚Р° Р‘Р–Р’.
+Р”Р»СЏ РўСЂРµРЅСѓРІР°РЅРЅСЏ: РѕС†С–РЅСЋР№ СЃРїР°Р»РµРЅС– РєРєР°Р», Р° СЃРїРѕР¶РёС‚С– РєРєР°Р» С– Р‘Р–Р’ СЃС‚Р°РІ 0.
+РќРµ РІРёРіР°РґСѓР№ СЃРєР»Р°РґРЅС– РЅР°Р·РІРё вЂ” РѕРїРёСЃ РјР°С” Р±СѓС‚Рё РєРѕСЂРѕС‚РєРёРј С– Р·СЂРѕР·СѓРјС–Р»РёРј.
 
-Поверни ТІЛЬКИ JSON в такому форматі:
+РџРѕРІРµСЂРЅРё РўР†Р›Р¬РљР JSON:
 {
-  "description": "короткий опис",
-  "type": "Їжа",
+  "description": "РєРѕСЂРѕС‚РєРёР№ РѕРїРёСЃ",
+  "type": "Р‡Р¶Р°",
   "consumed_kcal": 0,
   "burned_kcal": 0,
   "protein": 0,
   "fat": 0,
   "carbs": 0
 }
-Усі числа — суворо числа, не рядки.
+РЈСЃС– С‡РёСЃР»Р° вЂ” С‡РёСЃР»Р°, РЅРµ СЂСЏРґРєРё.
 """
     response = client.models.generate_content(
         model=GEMINI_MODEL,
-        contents=prompt + "\n\nЗапис користувача:\n" + user_text.strip(),
+        contents=prompt + "\n\nР—Р°РїРёСЃ РєРѕСЂРёСЃС‚СѓРІР°С‡Р°:\n" + user_text.strip(),
         config=types.GenerateContentConfig(response_mime_type="application/json"),
     )
     result = parse_json_response(response.text)
 
-    entry_type = clean_text(result.get("type", "Їжа"))
-    if entry_type not in {"Їжа", "Тренування"}:
-        entry_type = "Їжа"
+    entry_type = clean_text(result.get("type", "Р‡Р¶Р°"))
+    if entry_type not in {"Р‡Р¶Р°", "РўСЂРµРЅСѓРІР°РЅРЅСЏ"}:
+        entry_type = "Р‡Р¶Р°"
 
     consumed = max(0.0, clean_number(result.get("consumed_kcal", 0)))
     burned = max(0.0, clean_number(result.get("burned_kcal", 0)))
@@ -431,7 +442,7 @@ def analyze_entry(user_text):
     fat = max(0.0, clean_number(result.get("fat", 0)))
     carbs = max(0.0, clean_number(result.get("carbs", 0)))
 
-    if entry_type == "Тренування":
+    if entry_type == "РўСЂРµРЅСѓРІР°РЅРЅСЏ":
         consumed = 0.0
         protein = fat = carbs = 0.0
     else:
@@ -448,88 +459,102 @@ def analyze_entry(user_text):
     }
 
 # ============================================================
-# ЗАГОЛОВОК
+# Р—РђР“РћР›РћР’РћРљ
 # ============================================================
 df = load_data()
 current_weight = calculate_current_weight(df, settings)
 
-st.title(f"⚖️ Калорійний трекер — {profile}")
+st.title(f"вљ–пёЏ РљР°Р»РѕСЂС–Р№РЅРёР№ С‚СЂРµРєРµСЂ вЂ” {profile}")
 st.markdown(
-    f"### 📅 {datetime.now(LOCAL_TZ).strftime('%Y-%m-%d')} | "
-    f"Поточна вага: ~{current_weight:.1f} кг"
+    f"### рџ“… {datetime.now(LOCAL_TZ).strftime('%Y-%m-%d')} | "
+    f"РџРѕС‚РѕС‡РЅР° РІР°РіР°: ~{current_weight:.1f} РєРі"
 )
 
 # ============================================================
-# ВВІД ЇЖІ / ТРЕНУВАННЯ
+# Р’Р’Р†Р” Р‡Р–Р† / РўР Р•РќРЈР’РђРќРќРЇ
 # ============================================================
 input_key = f"food_input_{st.session_state.input_nonce}"
 user_input = st.text_input(
-    "🍽️ Влог",
-    placeholder="Наприклад: плов з куркою 350 г, чорний хліб 2 шматки",
+    "рџЌЅпёЏ Р’Р»РѕРі",
+    placeholder="РќР°РїСЂРёРєР»Р°Рґ: РїР»РѕРІ Р· РєСѓСЂРєРѕСЋ 350 Рі, С‡РѕСЂРЅРёР№ С…Р»С–Р± 2 С€РјР°С‚РєРё",
     key=input_key,
 )
 
-if st.button("✅ ОК", type="primary", use_container_width=True):
+if st.button("вњ… РћРљ", type="primary", use_container_width=True):
     if not user_input.strip():
-        st.warning("Введи продукт або тренування.")
+        st.warning("Р’РІРµРґРё РїСЂРѕРґСѓРєС‚ Р°Р±Рѕ С‚СЂРµРЅСѓРІР°РЅРЅСЏ.")
     else:
         try:
             result = analyze_entry(user_input)
             now = datetime.now(LOCAL_TZ)
             row = {
-                "Дата": now.strftime("%Y-%m-%d"),
-                "Час": now.strftime("%H:%M"),
-                "Опис": result["description"],
-                "Тип": result["type"],
-                "Спожито": result["consumed_kcal"],
-                "Спалено": result["burned_kcal"],
-                "Білки": result["protein"],
-                "Жири": result["fat"],
-                "Вуглеводи": result["carbs"],
+                "Р”Р°С‚Р°": now.strftime("%Y-%m-%d"),
+                "Р§Р°СЃ": now.strftime("%H:%M"),
+                "РћРїРёСЃ": result["description"],
+                "РўРёРї": result["type"],
+                "РЎРїРѕР¶РёС‚Рѕ": result["consumed_kcal"],
+                "РЎРїР°Р»РµРЅРѕ": result["burned_kcal"],
+                "Р‘С–Р»РєРё": result["protein"],
+                "Р–РёСЂРё": result["fat"],
+                "Р’СѓРіР»РµРІРѕРґРё": result["carbs"],
             }
             append_entry(row)
             st.session_state.undo_stack.append({"action": "add", "row": row})
             st.session_state.undo_stack = st.session_state.undo_stack[-10:]
+            # РџРѕР»Рµ РїРѕРІРЅС–СЃС‚СЋ РѕС‡РёС‰СѓС”С‚СЊСЃСЏ РїС–СЃР»СЏ СѓСЃРїС–С€РЅРѕРіРѕ Р·Р°РїРёСЃСѓ.
             st.session_state.input_nonce += 1
-            st.success("✅ Запис збережено в Google Sheets.")
+            st.success("вњ… Р—Р°РїРёСЃ Р·Р±РµСЂРµР¶РµРЅРѕ РІ Google Sheets.")
             st.rerun()
         except Exception as e:
-            st.error(f"❌ Не вдалося додати запис: {e}")
+            st.error(f"вќЊ РќРµ РІРґР°Р»РѕСЃСЏ РґРѕРґР°С‚Рё Р·Р°РїРёСЃ: {e}")
 
 # ============================================================
-# ДЕНЬ
+# Р”Р•РќР¬
 # ============================================================
 today = datetime.now(LOCAL_TZ).strftime("%Y-%m-%d")
 dates = [today]
-for d in sorted(df["Дата"].unique(), reverse=True) if not df.empty else []:
+for d in sorted(df["Р”Р°С‚Р°"].unique(), reverse=True) if not df.empty else []:
     d = clean_text(d)
     if d and d not in dates:
         dates.append(d)
-selected_date = st.selectbox("📅 День", dates)
+selected_date = st.selectbox("рџ“… Р”РµРЅСЊ", dates)
 
 # ============================================================
-# КНОПКИ КЕРУВАННЯ
+# РљРќРћРџРљР РљР•Р РЈР’РђРќРќРЇ
 # ============================================================
 col1, col2, col3 = st.columns(3)
 with col1:
-    undo_clicked = st.button("↩️ Відмінити", use_container_width=True)
+    undo_clicked = st.button("в†©пёЏ Р’С–РґРјС–РЅРёС‚Рё", use_container_width=True)
 with col2:
-    delete_clicked = st.button("🗑️ Видалити останній", use_container_width=True)
+    delete_clicked = st.button("рџ—‘пёЏ Р’РёРґР°Р»РёС‚Рё РѕСЃС‚Р°РЅРЅС–Р№", use_container_width=True)
 with col3:
-    settings_clicked = st.button("✏️ Редактор", use_container_width=True)
+    settings_clicked = st.button("вњЏпёЏ Р РµРґР°РєС‚РѕСЂ", use_container_width=True)
+
+def find_matching_row_index(dataframe, row):
+    if dataframe.empty:
+        return None
+    matches = (
+        dataframe["Р”Р°С‚Р°"].astype(str).eq(clean_text(row.get("Р”Р°С‚Р°", "")))
+        & dataframe["Р§Р°СЃ"].astype(str).eq(clean_text(row.get("Р§Р°СЃ", "")))
+        & dataframe["РћРїРёСЃ"].astype(str).eq(clean_text(row.get("РћРїРёСЃ", "")))
+        & dataframe["РўРёРї"].astype(str).eq(clean_text(row.get("РўРёРї", "Р‡Р¶Р°")))
+    )
+    idx = dataframe.index[matches]
+    return int(idx[-1]) if len(idx) else None
 
 def remove_matching_last_row(row):
     ws = get_worksheet()
     values = ws.get_all_values()
     if len(values) <= 1:
         return False
+    # РќР°Р№РЅР°РґС–Р№РЅС–С€Рµ РґР»СЏ Undo: РІРёРґР°Р»СЏС”РјРѕ РѕСЃС‚Р°РЅРЅС–Р№ СЂСЏРґРѕРє, СЏРєС‰Рѕ РІС–РЅ Р·Р±С–РіР°С”С‚СЊСЃСЏ Р· РґС–С”СЋ.
     last = values[-1]
     last_row = dict(zip(COLUMNS, (last + [""] * len(COLUMNS))[:len(COLUMNS)]))
     same = (
-        clean_text(last_row.get("Дата")) == clean_text(row.get("Дата"))
-        and clean_text(last_row.get("Час")) == clean_text(row.get("Час"))
-        and clean_text(last_row.get("Опис")) == clean_text(row.get("Опис"))
-        and clean_text(last_row.get("Тип")) == clean_text(row.get("Тип"))
+        clean_text(last_row.get("Р”Р°С‚Р°")) == clean_text(row.get("Р”Р°С‚Р°"))
+        and clean_text(last_row.get("Р§Р°СЃ")) == clean_text(row.get("Р§Р°СЃ"))
+        and clean_text(last_row.get("РћРїРёСЃ")) == clean_text(row.get("РћРїРёСЃ"))
+        and clean_text(last_row.get("РўРёРї")) == clean_text(row.get("РўРёРї"))
     )
     if same:
         ws.delete_rows(len(values))
@@ -539,68 +564,68 @@ def remove_matching_last_row(row):
 if undo_clicked:
     try:
         if not st.session_state.undo_stack:
-            st.warning("Немає дій для відміни.")
+            st.warning("РќРµРјР°С” РґС–Р№ РґР»СЏ РІС–РґРјС–РЅРё. РњР°РєСЃРёРјСѓРј Р·Р±РµСЂС–РіР°С”С‚СЊСЃСЏ 10 РѕСЃС‚Р°РЅРЅС–С… РґС–Р№.")
         else:
             action = st.session_state.undo_stack.pop()
             if action["action"] == "add":
                 if not remove_matching_last_row(action["row"]):
-                    st.warning("Не вдалося знайти запис для відміни.")
+                    st.warning("РќРµ РІРґР°Р»РѕСЃСЏ Р·РЅР°Р№С‚Рё Р·Р°РїРёСЃ РґР»СЏ РІС–РґРјС–РЅРё.")
                 else:
-                    st.success("↩️ Додавання відмінено.")
+                    st.success("в†©пёЏ Р”РѕРґР°РІР°РЅРЅСЏ РІС–РґРјС–РЅРµРЅРѕ.")
             elif action["action"] == "delete":
                 append_entry(action["row"])
-                st.success("↩️ Видалення відмінено — запис повернуто.")
+                st.success("в†©пёЏ Р’РёРґР°Р»РµРЅРЅСЏ РІС–РґРјС–РЅРµРЅРѕ вЂ” Р·Р°РїРёСЃ РїРѕРІРµСЂРЅСѓС‚Рѕ.")
             st.rerun()
     except Exception as e:
-        st.error(f"❌ Помилка відміни: {e}")
+        st.error(f"вќЊ РџРѕРјРёР»РєР° РІС–РґРјС–РЅРё: {e}")
 
 if delete_clicked:
     try:
         deleted = delete_last_entry()
         if deleted is None:
-            st.warning("Немає записів для видалення.")
+            st.warning("РќРµРјР°С” Р·Р°РїРёСЃС–РІ РґР»СЏ РІРёРґР°Р»РµРЅРЅСЏ.")
         else:
             with open(TRASH_FILE, "w", encoding="utf-8") as f:
                 json.dump(deleted, f, ensure_ascii=False, indent=2)
             st.session_state.undo_stack.append({"action": "delete", "row": deleted})
             st.session_state.undo_stack = st.session_state.undo_stack[-10:]
-            st.success("🗑️ Останній запис видалено.")
+            st.success("рџ—‘пёЏ РћСЃС‚Р°РЅРЅС–Р№ Р·Р°РїРёСЃ РІРёРґР°Р»РµРЅРѕ.")
             st.rerun()
     except Exception as e:
-        st.error(f"❌ Помилка видалення: {e}")
+        st.error(f"вќЊ РџРѕРјРёР»РєР° РІРёРґР°Р»РµРЅРЅСЏ: {e}")
 
 if settings_clicked:
     st.session_state.settings_open = not st.session_state.settings_open
     st.rerun()
 
 # ============================================================
-# РЕДАКТОР
+# Р Р•Р”РђРљРўРћР 
 # ============================================================
 if st.session_state.settings_open:
-    st.subheader("✏️ Редактор")
+    st.subheader("вњЏпёЏ Р РµРґР°РєС‚РѕСЂ")
     new_calories = st.number_input(
-        "🎯 Добова норма калорій",
+        "рџЋЇ Р”РѕР±РѕРІР° РЅРѕСЂРјР° РєР°Р»РѕСЂС–Р№",
         min_value=0,
         value=int(settings.get("calories", 2000)),
         step=50,
     )
     new_bmr = st.number_input(
-        "🔥 БМР / добова базова витрата",
+        "рџ”Ґ Р‘РњР  / РґРѕР±РѕРІР° Р±Р°Р·РѕРІР° РІРёС‚СЂР°С‚Р°",
         min_value=0,
         value=int(settings.get("bmr_daily", 1850)),
         step=50,
     )
     new_weight = st.number_input(
-        "⚖️ Початкова вага, кг",
+        "вљ–пёЏ РџРѕС‡Р°С‚РєРѕРІР° РІР°РіР°, РєРі",
         min_value=0.0,
         value=float(settings.get("initial_weight", 89.0)),
         step=0.1,
     )
     new_exercise = st.checkbox(
-        "💪 Враховувати тренування у дефіциті",
+        "рџ’Є Р’СЂР°С…РѕРІСѓРІР°С‚Рё С‚СЂРµРЅСѓРІР°РЅРЅСЏ Сѓ РґРµС„С–С†РёС‚С–",
         value=bool(settings.get("include_exercise_in_deficit", True)),
     )
-    if st.button("💾 Зберегти", type="primary", use_container_width=True):
+    if st.button("рџ’ѕ Р—Р±РµСЂРµРіС‚Рё", type="primary", use_container_width=True):
         save_settings({
             "calories": new_calories,
             "bmr_daily": new_bmr,
@@ -608,18 +633,18 @@ if st.session_state.settings_open:
             "include_exercise_in_deficit": new_exercise,
         })
         st.session_state.settings_open = False
-        st.success("✅ Налаштування збережено.")
+        st.success("вњ… РќР°Р»Р°С€С‚СѓРІР°РЅРЅСЏ Р·Р±РµСЂРµР¶РµРЅРѕ.")
         st.rerun()
 
 # ============================================================
-# ПЕРЕЗАВАНТАЖЕНІ ДАНІ ПІСЛЯ ДІЙ
+# РџР•Р Р•Р—РђР’РђРќРўРђР–Р•РќР† Р”РђРќР† РџР†РЎР›РЇ Р”Р†Р™
 # ============================================================
 df = load_data()
 current_weight = calculate_current_weight(df, settings)
-day_df = df[df["Дата"] == selected_date].copy() if not df.empty else empty_dataframe()
+day_df = df[df["Р”Р°С‚Р°"] == selected_date].copy() if not df.empty else empty_dataframe()
 
-consumed = float(day_df["Спожито"].sum()) if not day_df.empty else 0.0
-exercise_burned = float(day_df["Спалено"].sum()) if not day_df.empty else 0.0
+consumed = float(day_df["РЎРїРѕР¶РёС‚Рѕ"].sum()) if not day_df.empty else 0.0
+exercise_burned = float(day_df["РЎРїР°Р»РµРЅРѕ"].sum()) if not day_df.empty else 0.0
 
 bmr_daily = clean_number(settings.get("bmr_daily", 1850))
 now = datetime.now(LOCAL_TZ)
@@ -633,26 +658,26 @@ total_burned = bmr_elapsed + exercise_burned if settings.get("include_exercise_i
 balance = total_burned - consumed
 
 if balance > 0:
-    status_label = "ДЕФІЦИТ"
-    status_icon = "📉"
+    status_label = "Р”Р•Р¤Р†Р¦РРў"
+    status_icon = "рџ“‰"
     status_color = "#35D07F"
-    balance_text = f"{balance:.0f} ккал"
+    balance_text = f"{balance:.0f} РєРєР°Р»"
     status_class = "deficit"
 elif balance < 0:
-    status_label = "ПРОФІЦИТ"
-    status_icon = "📈"
+    status_label = "РџР РћР¤Р†Р¦РРў"
+    status_icon = "рџ“€"
     status_color = "#FF6262"
-    balance_text = f"+{abs(balance):.0f} ккал"
+    balance_text = f"+{abs(balance):.0f} РєРєР°Р»"
     status_class = "surplus"
 else:
-    status_label = "БАЛАНС"
-    status_icon = "⚖️"
+    status_label = "Р‘РђР›РђРќРЎ"
+    status_icon = "вљ–пёЏ"
     status_color = "#FFD166"
-    balance_text = "0 ккал"
+    balance_text = "0 РєРєР°Р»"
     status_class = "neutral"
 
 # ============================================================
-# КРУЖОК КАЛОРІЙ
+# РљР РЈР–РћРљ РљРђР›РћР Р†Р™ вЂ” РќР• MACROS
 # ============================================================
 target = max(0.0, clean_number(settings.get("calories", 2000)))
 if target > 0:
@@ -661,9 +686,15 @@ else:
     eaten_share = 0.0
 
 eaten_deg = eaten_share * 360
-ring_background = (
-    f"conic-gradient(#36A2EB 0deg {eaten_deg:.2f}deg, #2b2e36 {eaten_deg:.2f}deg 360deg)"
-)
+if consumed <= target and target > 0:
+    ring_background = (
+        f"conic-gradient(#36A2EB 0deg {eaten_deg:.2f}deg, "
+        f"#2b2e36 {eaten_deg:.2f}deg 360deg)"
+    )
+else:
+    ring_background = (
+        f"conic-gradient(#36A2EB 0deg 360deg)"
+    )
 
 donut_html = f"""
 <div class="donut-wrap">
@@ -671,9 +702,9 @@ donut_html = f"""
     <div class="donut-hole">
       <div class="donut-status" style="color:{status_color};">{status_icon} {status_label}</div>
       <div class="donut-main">{consumed:.0f}</div>
-      <div class="donut-sub">🍽️ з'їдено / {target:.0f} ккал</div>
-      <div class="donut-sub">🔥 БМР: {bmr_daily:.0f} ккал/добу</div>
-      <div class="donut-sub">⚖️ {current_weight:.1f} кг</div>
+      <div class="donut-sub">рџЌЅпёЏ Р·'С—РґРµРЅРѕ / {target:.0f} РєРєР°Р»</div>
+      <div class="donut-sub">рџ”Ґ Р‘РњР : {bmr_daily:.0f} РєРєР°Р»/РґРѕР±Сѓ</div>
+      <div class="donut-sub">вљ–пёЏ {current_weight:.1f} РєРі</div>
     </div>
   </div>
 </div>
@@ -681,46 +712,46 @@ donut_html = f"""
 st.markdown(donut_html, unsafe_allow_html=True)
 
 # ============================================================
-# ОСНОВНІ ЦИФРИ
+# РћРЎРќРћР’РќР† Р¦РР¤Р Р
 # ============================================================
-st.subheader("📊 Сьогодні")
+st.subheader("рџ“Љ РЎСЊРѕРіРѕРґРЅС–")
 s1, s2, s3 = st.columns(3)
 with s1:
-    st.metric("🍽️ З'їдено", f"{consumed:.0f} ккал")
+    st.metric("рџЌЅпёЏ Р—'С—РґРµРЅРѕ", f"{consumed:.0f} РєРєР°Р»")
 with s2:
-    st.metric("🎯 Добова норма", f"{target:.0f} ккал")
+    st.metric("рџЋЇ Р”РѕР±РѕРІР° РЅРѕСЂРјР°", f"{target:.0f} РєРєР°Р»")
 with s3:
-    st.metric("🔥 Витрачено", f"{total_burned:.0f} ккал")
+    st.metric("рџ”Ґ Р’РёС‚СЂР°С‡РµРЅРѕ", f"{total_burned:.0f} РєРєР°Р»")
 
 st.progress(min(max(consumed / target, 0.0), 1.0) if target > 0 else 0.0)
-st.caption(f"🍽️ {consumed:.0f} із {target:.0f} ккал")
+st.caption(f"рџЌЅпёЏ {consumed:.0f} С–Р· {target:.0f} РєРєР°Р»")
 
 # ============================================================
-# ВЛОГ
+# Р’Р›РћР“
 # ============================================================
-st.subheader(f"📋 Влог за {selected_date}")
+st.subheader(f"рџ“‹ Р’Р»РѕРі Р·Р° {selected_date}")
 if day_df.empty:
-    st.info("Записів ще немає. Додай їжу або тренування вище.")
+    st.info("Р—Р°РїРёСЃС–РІ С‰Рµ РЅРµРјР°С”. Р”РѕРґР°Р№ С—Р¶Сѓ Р°Р±Рѕ С‚СЂРµРЅСѓРІР°РЅРЅСЏ РІРёС‰Рµ.")
 else:
     for _, row in day_df.iloc[::-1].iterrows():
-        time_value = clean_text(row.get("Час", ""))[:5]
-        description = clean_text(row.get("Опис", ""))
-        row_type = clean_text(row.get("Тип", "Їжа")) or "Їжа"
+        time_value = clean_text(row.get("Р§Р°СЃ", ""))[:5]
+        description = clean_text(row.get("РћРїРёСЃ", ""))
+        row_type = clean_text(row.get("РўРёРї", "Р‡Р¶Р°")) or "Р‡Р¶Р°"
 
-        if row_type == "Тренування":
-            icon = "💪"
-            kcal = clean_number(row.get("Спалено", 0))
-            kcal_text = f"-{kcal:.0f} ккал"
+        if row_type == "РўСЂРµРЅСѓРІР°РЅРЅСЏ":
+            icon = "рџ’Є"
+            kcal = clean_number(row.get("РЎРїР°Р»РµРЅРѕ", 0))
+            kcal_text = f"-{kcal:.0f} РєРєР°Р»"
             kcal_color = "#FF6262"
         else:
-            icon = "🍽️"
-            kcal = clean_number(row.get("Спожито", 0))
-            kcal_text = f"+{kcal:.0f} ккал"
+            icon = "рџЌЅпёЏ"
+            kcal = clean_number(row.get("РЎРїРѕР¶РёС‚Рѕ", 0))
+            kcal_text = f"+{kcal:.0f} РєРєР°Р»"
             kcal_color = "#36A2EB"
 
-        protein = clean_number(row.get("Білки", 0))
-        fat = clean_number(row.get("Жири", 0))
-        carbs = clean_number(row.get("Вуглеводи", 0))
+        protein = clean_number(row.get("Р‘С–Р»РєРё", 0))
+        fat = clean_number(row.get("Р–РёСЂРё", 0))
+        carbs = clean_number(row.get("Р’СѓРіР»РµРІРѕРґРё", 0))
 
         st.markdown(
             f"""
@@ -729,32 +760,36 @@ else:
     <div class="log-title">{time_value} {icon} {description}</div>
     <div class="log-kcal" style="color:{kcal_color};">{kcal_text}</div>
   </div>
-  <div class="log-sub">Білки: {protein:.1f} г &nbsp;•&nbsp; Жири: {fat:.1f} г &nbsp;•&nbsp; Вуглеводи: {carbs:.1f} г</div>
+  <div class="log-sub">Р‘С–Р»РєРё: {protein:.1f} Рі &nbsp;вЂў&nbsp; Р–РёСЂРё: {fat:.1f} Рі &nbsp;вЂў&nbsp; Р’СѓРіР»РµРІРѕРґРё: {carbs:.1f} Рі</div>
 </div>
 """,
             unsafe_allow_html=True,
         )
 
 # ============================================================
-# ПІДСУМОК
+# РџР†Р”РЎРЈРњРћРљ
 # ============================================================
 st.divider()
 st.markdown(
     f"<div class='balance-card'>"
     f"<div class='balance-main {status_class}'>{status_icon} {status_label}: {balance_text}</div>"
-    f"<div class='balance-sub'>З'їдено: {consumed:.0f} ккал • Витрачено: {total_burned:.0f} ккал</div>"
+    f"<div class='balance-sub'>Р—'С—РґРµРЅРѕ: {consumed:.0f} РєРєР°Р» вЂў Р’РёС‚СЂР°С‡РµРЅРѕ: {total_burned:.0f} РєРєР°Р»</div>"
     f"</div>",
     unsafe_allow_html=True,
 )
-st.caption("⚖️ Орієнтир: приблизно 7700 ккал накопиченого дефіциту ≈ 1 кг зміни ваги.")
+st.caption("вљ–пёЏ РћСЂС–С”РЅС‚РёСЂ: РїСЂРёР±Р»РёР·РЅРѕ 7700 РєРєР°Р» РЅР°РєРѕРїРёС‡РµРЅРѕРіРѕ РґРµС„С–С†РёС‚Сѓ в‰€ 1 РєРі Р·РјС–РЅРё РІР°РіРё.")
 
 # ============================================================
-# ДІАГНОСТИКА GOOGLE SHEETS
+# Р”Р†РђР“РќРћРЎРўРРљРђ GOOGLE SHEETS
 # ============================================================
-with st.expander("🔧 Перевірка Google Sheets"):
+with st.expander("рџ”§ РџРµСЂРµРІС–СЂРєР° Google Sheets"):
     try:
         ws = get_worksheet()
-        st.success(f"Google Sheets підключено: вкладка «{ws.title}»")
-        st.caption(f"ID таблиці: {SPREADSHEET_ID}")
+        st.success(f"Google Sheets РїС–РґРєР»СЋС‡РµРЅРѕ: РІРєР»Р°РґРєР° В«{ws.title}В»")
+        st.caption(f"ID С‚Р°Р±Р»РёС†С–: {SPREADSHEET_ID}")
     except Exception as e:
-        st.error(f"Google Sheets недоступний: {e}")
+        st.error(f"Google Sheets РЅРµРґРѕСЃС‚СѓРїРЅРёР№: {e}")
+        st.info(
+            "Service Account РјР°С” Р±СѓС‚Рё Editor СЃР°РјРµ РґР»СЏ С†С–С”С— С‚Р°Р±Р»РёС†С–. "
+            "РўР°РєРѕР¶ Сѓ Google Cloud РјР°СЋС‚СЊ Р±СѓС‚Рё СѓРІС–РјРєРЅРµРЅС– Google Sheets API С‚Р° Google Drive API."
+)
